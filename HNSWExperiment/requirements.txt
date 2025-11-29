@@ -1,0 +1,5 @@
+Flask>=3.0.0,<4
+Werkzeug>=3.0.0,<4
+python-dotenv>=1.0.1
+openai>=1.51.0
+neo4j>=5.22.0
