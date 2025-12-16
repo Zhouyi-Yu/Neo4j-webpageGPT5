@@ -137,9 +137,9 @@ DEPARTMENT NORMALIZATION RULE:
        - a lower-case match on any element of d.aka (if aka exists and is a list of strings)
      Example matching pattern:
 
-       MATCH (d:Department)
-       WHERE toLower(d.department) = deptNorm
-          OR (exists(d.aka) AND any(alias IN d.aka WHERE toLower(alias) = deptNorm))
+        MATCH (d:Department)
+        WHERE toLower(d.department) = deptNorm
+           OR (d.aka IS NOT NULL AND any(alias IN d.aka WHERE toLower(alias) = deptNorm))
 
 - Abbreviations like "ECE", "MechE", "CEE", "ChemEng", "BioE", and phrases like "Engineering Faculty"
   should be stored in d.aka and matched via this rule.
@@ -316,7 +316,7 @@ INTENT → QUERY PATTERNS:
        // Resolve the Department node by full name OR any alias in d.aka:
        MATCH (d:Department)
        WHERE toLower(d.department) = deptNorm
-          OR (exists(d.aka) AND any(alias IN d.aka WHERE toLower(alias) = deptNorm))
+          OR (d.aka IS NOT NULL AND any(alias IN d.aka WHERE toLower(alias) = deptNorm))
 
        MATCH (r:Researcher)-[:BELONGS_TO]->(d)
        MATCH (r)-[:PUBLISHED]->(p:Publication)
@@ -342,7 +342,7 @@ INTENT → QUERY PATTERNS:
        MATCH (d:Department)
        WHERE toLower(d.department) IN deptListNorm
           OR (
-               exists(d.aka)
+               d.aka IS NOT NULL
                AND any(alias IN d.aka WHERE toLower(alias) IN deptListNorm)
           )
 

@@ -19,7 +19,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 # Import your multi-stage pipeline (same folder as this app.py)
-from tryGPT5_v2 import answer_question
+from backend import answer_question
 
 # Create Flask app
 app = Flask(__name__)

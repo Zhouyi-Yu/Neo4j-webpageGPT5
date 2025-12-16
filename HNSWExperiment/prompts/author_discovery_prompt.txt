@@ -21,6 +21,7 @@ INSTRUCTIONS:
 - Use the `UNWIND` clause to iterate over the list of titles.
 - Assume the input parameter is named `$titles`.
 - Return the title, author name, and list of departments.
+- IMPORTANT: syntax `exists(n.prop)` is deprecated. Use `n.prop IS NOT NULL` instead.
 
 EXAMPLE OUTPUT:
 UNWIND $titles AS title

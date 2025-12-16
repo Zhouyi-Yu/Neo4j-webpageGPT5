@@ -278,7 +278,7 @@ def recursive_semantic_answer(
     """
     payload = {
         "question": question,
-        "semantic_hits": semantic_hits,
+        "semantic_hits": [{k: (v[:500] + "..." if isinstance(v, str) and len(v) > 500 else v) for k, v in hit.items()} for hit in semantic_hits[:15]],
         "first_pass_summary": first_pass_summary,
     }
     user_content = json.dumps(payload, ensure_ascii=False)
@@ -434,6 +434,34 @@ def semantic_search_uofa(question_text: str, k: int = 20) -> List[Dict[str, Any]
 # STEP 3: ANSWER SYNTHESIS
 # ───────────────────────────────────────────────────────────────
 
+# ───────────────────────────────────────────────────────────────
+# STEP 3: ANSWER SYNTHESIS
+# ───────────────────────────────────────────────────────────────
+
+def _sanitize_payload(data: Union[Dict, List], max_items: int = 15, max_text_len: int = 500) -> Union[Dict, List]:
+    """
+    Recursively sanitize data sent to LLM to prevent context window explosion.
+    - Limits list length to `max_items`.
+    - Truncates long string values (like 'abstract') to `max_text_len`.
+    """
+    if isinstance(data, list):
+        # Limit list size
+        sliced = data[:max_items]
+        return [_sanitize_payload(item, max_items, max_text_len) for item in sliced]
+    
+    if isinstance(data, dict):
+        new_dict = {}
+        for k, v in data.items():
+            if isinstance(v, str) and len(v) > max_text_len:
+                new_dict[k] = v[:max_text_len] + "...(truncated)"
+            elif isinstance(v, (dict, list)):
+                new_dict[k] = _sanitize_payload(v, max_items, max_text_len)
+            else:
+                new_dict[k] = v
+        return new_dict
+    
+    return data
+
 def synthesize_answer(
     question: str,
     intent_obj: Dict[str, Any],
@@ -445,8 +473,8 @@ def synthesize_answer(
         "question": question,
         "intent": intent_obj,
         "cypher": cypher,
-        "db_rows": db_rows,
-        "semantic_hits": semantic_hits,
+        "db_rows": _sanitize_payload(db_rows),
+        "semantic_hits": _sanitize_payload(semantic_hits),
     }
     user_content = json.dumps(payload, ensure_ascii=False)
     answer = call_llm(ANSWER_SYSTEM_PROMPT, user_content)
@@ -460,8 +488,8 @@ def synthesize_final_author_answer(
 ) -> str:
     payload = {
         "question": question,
-        "semantic_hits": semantic_hits,
-        "author_data": author_rows,
+        "semantic_hits": _sanitize_payload(semantic_hits),
+        "author_data": _sanitize_payload(author_rows),
     }
     user_content = json.dumps(payload, ensure_ascii=False)
     return call_llm(FINAL_AUTHOR_ANSWER_PROMPT, user_content).strip()
