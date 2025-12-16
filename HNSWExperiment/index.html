@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>UAlberta Research Assistant</title>
@@ -9,6 +10,7 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color-scheme: dark light;
     }
+
     body {
       margin: 0;
       padding: 0;
@@ -17,20 +19,24 @@
       display: flex;
       justify-content: center;
     }
+
     .app {
       max-width: 960px;
       width: 100%;
       padding: 1.5rem;
     }
+
     h1 {
       font-size: 1.75rem;
       margin-bottom: 0.25rem;
     }
+
     .subtitle {
       font-size: 0.9rem;
       color: #9ca3af;
       margin-bottom: 1.5rem;
     }
+
     .card {
       background: #020617;
       border-radius: 0.75rem;
@@ -39,16 +45,19 @@
       border: 1px solid #1e293b;
       margin-bottom: 1rem;
     }
+
     .row {
       display: flex;
       flex-direction: row;
       gap: 1rem;
       flex-wrap: wrap;
     }
+
     .col {
       flex: 1 1 0;
       min-width: 260px;
     }
+
     textarea {
       width: 100%;
       resize: vertical;
@@ -62,10 +71,12 @@
       font-size: 0.95rem;
       box-sizing: border-box;
     }
+
     textarea:focus {
       outline: 2px solid #38bdf8;
       border-color: #38bdf8;
     }
+
     button {
       appearance: none;
       border: none;
@@ -82,15 +93,18 @@
       transition: transform 0.08s ease-out, box-shadow 0.08s ease-out, opacity 0.2s;
       box-shadow: 0 10px 20px rgba(96, 165, 250, 0.35);
     }
+
     button:disabled {
       opacity: 0.5;
       cursor: default;
       box-shadow: none;
     }
+
     button:not(:disabled):hover {
       transform: translateY(-1px);
       box-shadow: 0 14px 30px rgba(96, 165, 250, 0.4);
     }
+
     .button-row {
       margin-top: 0.6rem;
       display: flex;
@@ -99,21 +113,26 @@
       gap: 0.5rem;
       flex-wrap: wrap;
     }
+
     .status {
       font-size: 0.85rem;
       color: #9ca3af;
     }
+
     .status.loading::before {
       content: "● ";
       color: #38bdf8;
     }
+
     .status.error {
       color: #f97373;
     }
+
     h2 {
       font-size: 1.1rem;
       margin: 0 0 0.5rem;
     }
+
     pre {
       background: #020617;
       border-radius: 0.5rem;
@@ -124,79 +143,127 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+
     .answer-text {
       font-size: 0.98rem;
       line-height: 1.5;
       white-space: pre-wrap;
     }
+
     details {
       margin-top: 0.5rem;
     }
-    details > summary {
+
+    details>summary {
       cursor: pointer;
       font-size: 0.9rem;
       color: #9ca3af;
     }
+
     .tagline {
       font-size: 0.8rem;
       color: #64748b;
       margin-top: 0.5rem;
     }
+
     .candidate-list {
-  margin-top: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
+      display: none;
+      /* Hidden by default */
+      margin-top: 0.75rem;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
 
-.candidate-info {
-  font-size: 0.9rem;
-  color: #9ca3af;
-}
+    .candidate-list.visible {
+      display: flex;
+    }
 
-.candidate-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid #1e293b;
-  background: #020617;
-}
+    .candidate-info {
+      font-size: 0.9rem;
+      color: #9ca3af;
+    }
 
-.candidate-label {
-  font-size: 0.95rem;
-  font-weight: 500;
-}
+    .candidate-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 0.5rem;
+      border: 1px solid #1e293b;
+      background: #020617;
+    }
 
-.candidate-meta {
-  font-size: 0.8rem;
-  color: #6b7280;
-}
+    .candidate-label {
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
 
-.candidate-btn {
-  align-self: flex-start;
-  margin-top: 0.25rem;
-  padding: 0.3rem 0.8rem;
-  font-size: 0.85rem;
-}
-.candidate-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.5rem;
-}
+    .candidate-meta {
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    .candidate-btn {
+      align-self: flex-start;
+      margin-top: 0.25rem;
+      padding: 0.3rem 0.8rem;
+      font-size: 0.85rem;
+    }
+
+    .candidate-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+    }
+
+    .candidate-scroll {
+      display: none;
+      margin-top: 0.5rem;
+      border: 1px solid #1e293b;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: #0b1224;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .candidate-scroll.visible {
+      display: block;
+    }
+
+    .candidate-scroll .candidate-name-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: #111827;
+      border: 1px solid #1f2937;
+      color: #e5e7eb;
+      border-radius: 0.35rem;
+      padding: 0.4rem 0.55rem;
+      margin: 0.25rem 0;
+      cursor: pointer;
+    }
+
+    .candidate-scroll .candidate-name-btn:hover {
+      background: #1f2937;
+    }
 
     @media (max-width: 640px) {
       .app {
         padding: 1rem;
       }
+
       h1 {
         font-size: 1.5rem;
       }
     }
   </style>
 </head>
+
 <body>
   <div class="app">
     <header style="margin-bottom: 1rem;">
@@ -210,8 +277,7 @@
     <!-- Query input -->
     <section class="card">
       <h2>Ask a question</h2>
-      <textarea id="questionInput"
-                placeholder="Examples:
+      <textarea id="questionInput" placeholder="Examples:
 - What are the main research areas of Marek Reformat?
 - How many publications does Petr Musilek have on smart grids?
 - Does Lukasz Kurgan work on deep learning?
@@ -233,11 +299,13 @@
       <div class="col">
         <div class="card">
           <h2>Answer</h2>
+          <!-- Candidate list container (detailed cards/buttons) -->
+          <div id="candidateList" class="candidate-list"></div>
+          <!-- Scrollable names-only list; shown when no direct match and we need disambiguation -->
+          <div id="candidateScrollList" class="candidate-scroll"></div>
           <div id="answerText" class="answer-text" style="min-height: 2.5rem; color:#9ca3af;">
             Ask a question to see results here.
           </div>
-          <!-- NEW: candidate list goes here when we need disambiguation -->
-          <div id="candidateList" class="candidate-list"></div>
         </div>
       </div>
 
@@ -280,116 +348,157 @@
     const dbRowsText = document.getElementById('dbRowsText');
     const semanticHitsText = document.getElementById('semanticHitsText');
     const candidateList = document.getElementById('candidateList');
+    const candidateScrollList = document.getElementById('candidateScrollList');
     let allCandidates = [];
     let candidatePage = 0;
     const CANDIDATES_PER_PAGE = 20;
 
 
-    function renderCandidates(candidates, originalQuestion) {
-  allCandidates = candidates || [];
-  candidatePage = 0;
-  candidateList.innerHTML = "";
+    function renderCandidates(candidates, originalQuestion, typedAuthor) {
+      allCandidates = (candidates || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+      candidatePage = 0;
+      candidateList.innerHTML = "";
+      candidateScrollList.innerHTML = "";
+      candidateScrollList.classList.remove('visible');
 
-  if (!allCandidates.length) return;
+      if (!allCandidates.length) {
+        candidateList.classList.remove('visible');
+        return;
+      }
+      candidateList.classList.add('visible');
 
-  const info = document.createElement('div');
-  info.className = 'candidate-info';
-  info.textContent = 'I found multiple researchers matching that name. Please pick one:';
-  candidateList.appendChild(info);
+      const info = document.createElement('div');
+      info.className = 'candidate-info';
+      info.textContent = 'Possible Candidates (No exact match found):';
+      candidateList.appendChild(info);
 
-  // container for the current page entries
-  const itemsContainer = document.createElement('div');
-  candidateList.appendChild(itemsContainer);
+      // container for the current page entries
+      const itemsContainer = document.createElement('div');
+      candidateList.appendChild(itemsContainer);
 
-  // navigation row
-  const nav = document.createElement('div');
-  nav.className = 'candidate-nav';
+      // navigation row
+      const nav = document.createElement('div');
+      nav.className = 'candidate-nav';
 
-  const prevBtn = document.createElement('button');
-  prevBtn.type = 'button';
-  prevBtn.className = 'candidate-btn';
-  prevBtn.textContent = 'Previous';
-  prevBtn.disabled = true;
+      const prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'candidate-btn';
+      prevBtn.textContent = 'Previous';
+      prevBtn.disabled = true;
 
-  const pageLabel = document.createElement('span');
-  pageLabel.className = 'candidate-meta';
+      const pageLabel = document.createElement('span');
+      pageLabel.className = 'candidate-meta';
 
-  const nextBtn = document.createElement('button');
-  nextBtn.type = 'button';
-  nextBtn.className = 'candidate-btn';
-  nextBtn.textContent = 'Next';
+      const nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
+      nextBtn.className = 'candidate-btn';
+      nextBtn.textContent = 'Next';
 
-  nav.appendChild(prevBtn);
-  nav.appendChild(pageLabel);
-  nav.appendChild(nextBtn);
-  candidateList.appendChild(nav);
+      nav.appendChild(prevBtn);
+      nav.appendChild(pageLabel);
+      nav.appendChild(nextBtn);
+      candidateList.appendChild(nav);
 
-  function renderPage() {
-    itemsContainer.innerHTML = "";
+      function renderPage() {
+        itemsContainer.innerHTML = "";
+        candidateScrollList.innerHTML = "";
 
-    const totalPages = Math.ceil(allCandidates.length / CANDIDATES_PER_PAGE) || 1;
-    const start = candidatePage * CANDIDATES_PER_PAGE;
-    const end = start + CANDIDATES_PER_PAGE;
-    const pageCandidates = allCandidates.slice(start, end);
+        const totalPages = Math.ceil(allCandidates.length / CANDIDATES_PER_PAGE) || 1;
+        const start = candidatePage * CANDIDATES_PER_PAGE;
+        const end = start + CANDIDATES_PER_PAGE;
+        const pageCandidates = allCandidates.slice(start, end);
 
-    pageCandidates.forEach((c) => {
-      const item = document.createElement('div');
-      item.className = 'candidate-item';
+        pageCandidates.forEach((c) => {
+          const item = document.createElement('div');
+          item.className = 'candidate-item';
 
-      const label = document.createElement('div');
-      label.className = 'candidate-label';
-      const displayName = c.name || c.normalized_name || c.openalex_url || '(unnamed)';
-      label.textContent = displayName;
+          const label = document.createElement('div');
+          label.className = 'candidate-label';
+          const displayName = c.name || c.normalized_name || c.openalex_url || '(unnamed)';
+          label.textContent = displayName;
 
-      const meta = document.createElement('div');
-      meta.className = 'candidate-meta';
-      if (Array.isArray(c.departments) && c.departments.length) {
-        const depts = c.departments.filter(Boolean);
-        if (depts.length) meta.textContent = depts.join(', ');
+          const meta = document.createElement('div');
+          meta.className = 'candidate-meta';
+          if (Array.isArray(c.departments) && c.departments.length) {
+            const depts = c.departments.filter(Boolean);
+            if (depts.length) meta.textContent = depts.join(', ');
+          }
+
+          item.appendChild(label);
+          if (meta.textContent) item.appendChild(meta);
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'candidate-btn';
+          btn.textContent = displayName;
+
+          btn.addEventListener('click', () => {
+            const baseQuestion = originalQuestion || questionInput.value.trim();
+            let newQuestion = baseQuestion;
+            if (typedAuthor && baseQuestion.toLowerCase().includes(typedAuthor.toLowerCase())) {
+              newQuestion = baseQuestion.replace(new RegExp(typedAuthor, "i"), displayName);
+            } else {
+              newQuestion = `For researcher ${displayName}, ${baseQuestion}`;
+            }
+            questionInput.value = newQuestion;
+            candidateList.innerHTML = "";
+            askQuestion();
+          });
+
+          item.appendChild(btn);
+          itemsContainer.appendChild(item);
+
+          // Also build names-only list (scrollable)
+          const nameBtn = document.createElement('button');
+          nameBtn.type = 'button';
+          nameBtn.className = 'candidate-name-btn';
+          nameBtn.textContent = displayName;
+          nameBtn.addEventListener('click', () => {
+            const baseQuestion = originalQuestion || questionInput.value.trim();
+            let newQuestion = baseQuestion;
+            if (typedAuthor && baseQuestion.toLowerCase().includes(typedAuthor.toLowerCase())) {
+              newQuestion = baseQuestion.replace(new RegExp(typedAuthor, "i"), displayName);
+            } else {
+              newQuestion = `For researcher ${displayName}, ${baseQuestion}`;
+            }
+            questionInput.value = newQuestion;
+            candidateList.innerHTML = "";
+            candidateScrollList.innerHTML = "";
+            candidateScrollList.classList.remove('visible');
+            askQuestion();
+          });
+          candidateScrollList.appendChild(nameBtn);
+        });
+
+        if (pageCandidates.length) {
+          candidateScrollList.classList.add('visible');
+        } else {
+          candidateScrollList.classList.remove('visible');
+        }
+
+        pageLabel.textContent = `Page ${candidatePage + 1} of ${Math.max(totalPages, 1)}`;
+        prevBtn.disabled = candidatePage <= 0;
+        nextBtn.disabled = candidatePage >= totalPages - 1;
       }
 
-      item.appendChild(label);
-      if (meta.textContent) item.appendChild(meta);
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'candidate-btn';
-      btn.textContent = 'Use this researcher';
-
-      btn.addEventListener('click', () => {
-        const baseQuestion = originalQuestion || questionInput.value.trim();
-        questionInput.value = `For researcher ${displayName}, ${baseQuestion}`;
-        candidateList.innerHTML = "";
-        askQuestion();
+      prevBtn.addEventListener('click', () => {
+        if (candidatePage > 0) {
+          candidatePage -= 1;
+          renderPage();
+        }
       });
 
-      item.appendChild(btn);
-      itemsContainer.appendChild(item);
-    });
+      nextBtn.addEventListener('click', () => {
+        const totalPages = Math.ceil(allCandidates.length / CANDIDATES_PER_PAGE) || 1;
+        if (candidatePage < totalPages - 1) {
+          candidatePage += 1;
+          renderPage();
+        }
+      });
 
-    pageLabel.textContent = `Page ${candidatePage + 1} of ${Math.max(totalPages, 1)}`;
-    prevBtn.disabled = candidatePage <= 0;
-    nextBtn.disabled = candidatePage >= totalPages - 1;
-  }
-
-  prevBtn.addEventListener('click', () => {
-    if (candidatePage > 0) {
-      candidatePage -= 1;
+      // initial render
       renderPage();
     }
-  });
-
-  nextBtn.addEventListener('click', () => {
-    const totalPages = Math.ceil(allCandidates.length / CANDIDATES_PER_PAGE) || 1;
-    if (candidatePage < totalPages - 1) {
-      candidatePage += 1;
-      renderPage();
-    }
-  });
-
-  // initial render
-  renderPage();
-}
 
 
     async function askQuestion() {
@@ -417,6 +526,9 @@
       dbRowsText.textContent = "–";
       semanticHitsText.textContent = "–";
       candidateList.innerHTML = "";
+      candidateList.classList.remove('visible');
+      candidateScrollList.innerHTML = "";
+      candidateScrollList.classList.remove('visible');
 
 
       try {
@@ -433,55 +545,60 @@
 
         const data = await res.json();
 
-// Disambiguation case: multiple candidate researchers from backend
-if (data.candidates && Array.isArray(data.candidates) && data.candidates.length > 1) {
-  answerText.style.color = "#e5e7eb";
-  answerText.textContent = data.answer || "Multiple researchers found. Please choose one:";
+        // Disambiguation case: candidate researchers from backend (one or many)
+        if (data.candidates && Array.isArray(data.candidates) && data.candidates.length >= 1) {
+          answerText.style.color = "#e5e7eb";
+          answerText.textContent = data.answer || "Researchers found. Please choose one:";
 
-  // Show intent JSON (still useful for debugging)
-  if (data.intent) {
-    intentJson.textContent = JSON.stringify(data.intent, null, 2);
-  } else {
-    intentJson.textContent = "–";
-  }
+          // Show intent JSON (still useful for debugging)
+          if (data.intent) {
+            intentJson.textContent = JSON.stringify(data.intent, null, 2);
+          } else {
+            intentJson.textContent = "–";
+          }
 
-  cypherText.textContent = data.cypher || "–";
-  dbRowsText.textContent = "[]";
-  semanticHitsText.textContent = "[]";
+          cypherText.textContent = data.cypher || "–";
+          dbRowsText.textContent = "[]";
+          semanticHitsText.textContent = "[]";
 
-  renderCandidates(data.candidates, question);
+          try {
+            renderCandidates(data.candidates, question, (data.intent && data.intent.author) || null);
+          } catch (err) {
+            console.error("Error rendering candidates", err, data.candidates);
+            candidateList.innerHTML = "<div class='candidate-info'>Could not render candidates. Check console.</div>";
+          }
 
-  statusText.textContent = "Please select a researcher.";
-  statusText.classList.remove('loading');
-  return; // stop here; wait for user to choose
-}
+          statusText.textContent = "Please select a researcher.";
+          statusText.classList.remove('loading');
+          return; // stop here; wait for user to choose
+        }
 
-// Normal case: no disambiguation needed
-answerText.style.color = "#e5e7eb";
-answerText.textContent = data.answer || "(no answer returned)";
+        // Normal case: no disambiguation needed
+        answerText.style.color = "#e5e7eb";
+        answerText.textContent = data.answer || "(no answer returned)";
 
-if (data.intent) {
-  intentJson.textContent = JSON.stringify(data.intent, null, 2);
-} else {
-  intentJson.textContent = "–";
-}
+        if (data.intent) {
+          intentJson.textContent = JSON.stringify(data.intent, null, 2);
+        } else {
+          intentJson.textContent = "–";
+        }
 
-cypherText.textContent = data.cypher || "–";
+        cypherText.textContent = data.cypher || "–";
 
-if (data.dbRows && data.dbRows.length) {
-  dbRowsText.textContent = JSON.stringify(data.dbRows, null, 2);
-} else {
-  dbRowsText.textContent = "[]";
-}
+        if (data.dbRows && data.dbRows.length) {
+          dbRowsText.textContent = JSON.stringify(data.dbRows, null, 2);
+        } else {
+          dbRowsText.textContent = "[]";
+        }
 
-if (data.semanticHits && data.semanticHits.length) {
-  semanticHitsText.textContent = JSON.stringify(data.semanticHits, null, 2);
-} else {
-  semanticHitsText.textContent = "[]";
-}
+        if (data.semanticHits && data.semanticHits.length) {
+          semanticHitsText.textContent = JSON.stringify(data.semanticHits, null, 2);
+        } else {
+          semanticHitsText.textContent = "[]";
+        }
 
-statusText.textContent = "Done.";
-statusText.classList.remove('loading');
+        statusText.textContent = "Done.";
+        statusText.classList.remove('loading');
       } catch (err) {
         console.error(err);
         statusText.textContent = "Error: " + err.message;
@@ -504,4 +621,5 @@ statusText.classList.remove('loading');
     });
   </script>
 </body>
+
 </html>

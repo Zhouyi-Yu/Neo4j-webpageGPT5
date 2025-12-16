@@ -51,9 +51,21 @@ def setup_test_data(driver):
             REMOVE r.userId, r.ccid
         """)
         
-        # Ensure the index is online (might take a moment if just created, but usually fast)
-        # In a real scenario, we'd wait for the index, but for this simple test we assume it's there 
-        # or we might fail if the user hasn't run superDBmaker.py yet.
+        # Ensure the index is online
+        # Create the index if it doesn't exist to make the test self-contained
+        session.run("""
+            CREATE FULLTEXT INDEX researcher_name_index IF NOT EXISTS
+            FOR (r:Researcher) ON EACH [r.name, r.normalized_name]
+        """)
+        
+        # Wait a brief moment or call db.awaitIndex/equivalents if possible. 
+        # For simplicity in this test script, we force a wait or check status.
+        import time
+        for _ in range(10):
+            result = session.run("SHOW INDEXES YIELD name, state WHERE name = 'researcher_name_index'").single()
+            if result and result["state"] == "ONLINE":
+                break
+            time.sleep(0.5)
 
     yield
 
@@ -73,7 +85,6 @@ def test_fuzzy_search_ualberta_only(driver, setup_test_data):
     intent_obj = {"author": "TestMark Refamt"} 
     
     # We need to ensure the index exists for this to work.
-    # If this fails, it's likely because the Fulltext Index hasn't been created yet.
     try:
         updated_intent, candidates = resolve_author(intent_obj)
     except Exception as e:
@@ -81,16 +92,28 @@ def test_fuzzy_search_ualberta_only(driver, setup_test_data):
 
     # We expect candidates because "TestMark Refamt" is not an exact match, 
     # so the fuzzy logic should kick in and return a list of candidates.
+    assert candidates is not None, "Expected fuzzy candidates for misspelled name, got None"
+    assert len(candidates) > 0, "Expected at least one candidate"
     
     # Check if we got the correct candidate
     found = False
-    if candidates:
-        for cand in candidates:
-            if cand['userId'] == TEST_USER_ID:
-                found = True
-                break
+    for cand in candidates:
+        if cand['userId'] == TEST_USER_ID:
+            found = True
+            break
     
     assert found, f"Fuzzy search failed to find UAlberta researcher '{TEST_RESEARCHER_NAME}' with query '{intent_obj['author']}'"
+
+def test_exact_match_priority(driver, setup_test_data):
+    """
+    Test that an exact match returns immediately without a candidate list.
+    """
+    intent_obj = {"author": TEST_RESEARCHER_NAME}
+    updated_intent, candidates = resolve_author(intent_obj)
+    
+    # Expect candidates to be None because we found an exact match
+    assert candidates is None, "Exact match should NOT return a candidate list"
+    assert updated_intent.get("authorUserId") == TEST_USER_ID, "Exact match should set authorUserId"
 
 def test_external_researcher_ignored(driver, setup_test_data):
     """
@@ -102,8 +125,6 @@ def test_external_researcher_ignored(driver, setup_test_data):
     updated_intent, candidates = resolve_author(intent_obj)
     
     # Should be None or empty candidates because we filter WHERE userId IS NOT NULL OR ccid IS NOT NULL
-    # The exact match logic in resolve_author might have been replaced by fuzzy-only or combined.
-    # Based on my change, it's purely fuzzy/index-based with the filter.
     
     found_external = False
     if candidates:
@@ -112,6 +133,8 @@ def test_external_researcher_ignored(driver, setup_test_data):
                 found_external = True
     
     assert not found_external, "Search should NOT return researchers without userId/ccid (Non-UAlberta)"
+    # Also ensure we didn't accidentally resolve it as an exact match
+    assert updated_intent.get("authorUserId") is None, "Should not resolve external researcher ID"
 
 if __name__ == "__main__":
     # Manual run if executed as script
