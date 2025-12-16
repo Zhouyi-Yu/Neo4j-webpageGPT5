@@ -24,7 +24,7 @@ from neo4j import GraphDatabase
 # ───────────────────────────────────────────────────────────────
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-load_dotenv(os.path.join(BASE_DIR, ".env"), override=True)
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=False)
 
 # ───────────────────────────────────────────────────────────────
 # PROMPT LOADER
@@ -279,30 +279,33 @@ def resolve_author(intent_obj: Dict[str, Any]):
         return intent_obj, None
 
     with driver.session() as session:
-        # 1) Strict exact match (case-insensitive) on normalized_name
-        exact_cypher = """
-        WITH toLower($name) AS normName
-        MATCH (p:Person)
-        WHERE toLower(p.normalized_name) = normName
-        OPTIONAL MATCH (p)-[:BELONGS_TO]->(d:Department)
-        RETURN p.userId AS userId,
-               coalesce(p.name, p.normalized_name) AS name,
-               p.normalized_name AS normalized_name,
-               collect(DISTINCT d.department) AS departments
+        # Fuzzy search using fulltext index on Researcher names
+        # Filter: only return UAlberta researchers (those with userId or ccid)
+        fuzzy_cypher = """
+        CALL db.index.fulltext.queryNodes("researcher_name_index", $name + "~") YIELD node, score
+        WHERE (node.userId IS NOT NULL OR node.ccid IS NOT NULL)
+        OPTIONAL MATCH (node)-[:BELONGS_TO]->(d:Department)
+        RETURN node.userId AS userId,
+               coalesce(node.name, node.normalized_name) AS name,
+               node.normalized_name AS normalized_name,
+               collect(DISTINCT d.department) AS departments,
+               score
+        ORDER BY score DESC
+        LIMIT 5
         """
-        rows = [dict(r) for r in session.run(exact_cypher, name=author_name)]
+        rows = [dict(r) for r in session.run(fuzzy_cypher, name=author_name)]
 
-        # If exactly one → use it
+        # If exactly one result found, auto-select it
         if len(rows) == 1:
             intent_obj["author"] = rows[0]["name"]
             intent_obj["authorUserId"] = rows[0]["userId"]
             return intent_obj, None
 
-        # If more than one exact match (rare), send candidates
+        # If multiple results, return them as candidates for the user to pick
         if len(rows) > 1:
             return intent_obj, rows
 
-        # 2) No partial matching anymore → just return with no candidates
+        # If no results, return None
         return intent_obj, None
 
 
