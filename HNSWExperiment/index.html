@@ -385,13 +385,48 @@
       gap: 0.5rem;
     }
 
+    /* Logo in bottom left */
+    .logo-corner {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      width: 250px;
+      opacity: 1.0;
+      /* Full visibility */
+      z-index: 10;
+      pointer-events: none;
+      /* Removed mix-blend-mode to render the image "as is".
+         If the image itself is transparent, it will show the page background (#0f172a). */
+    }
+
+    /* Copy Button */
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid #334155;
+      border-radius: 0.3rem;
+      color: #9ca3af;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      margin-top: 0.75rem;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: #334155;
+      color: #fff;
+    }
+
     /* Override textarea styles for chat input */
     .chat-input-area textarea {
-      min-height: 60px;
-      max-height: 150px;
+      min-height: 120px;
+      /* Increased from 60px */
+      max-height: 250px;
       border-radius: 0.5rem;
-      resize: none;
-      /* Auto-grow via JS ideally, but fixed for now is fine */
+      resize: vertical;
     }
 
     /* Candidate list inside message */
@@ -453,9 +488,49 @@
       }
     }
   </style>
+  <!-- Marked.js for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    /* Markdown Styles in Chat */
+    .message ul,
+    .message ol {
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .message li {
+      margin-bottom: 0.5rem;
+    }
+
+    .message strong {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .message p {
+      margin-bottom: 1rem;
+    }
+
+    .message p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Link styling if needed */
+    .message a {
+      color: #60a5fa;
+      text-decoration: underline;
+    }
+  </style>
 </head>
 
 <body>
+  <div class="logo-corner" style="position: absolute; top: 0; right: 100%; margin-right: 20px;">
+    <img src="./logos/txtProceed.png" alt="Top Logo"
+      style="width: 50%; display: block; margin-left: auto; margin-bottom: 10px;margin-top: 40px;">
+
+    <img src="./logos/logoProceed.png" alt="Logo" style="width: 70%; display: block; margin-left: auto;">
+  </div>
+
   <button class="debug-toggle-btn" id="debugToggleBtn">Show Debug</button>
 
   <div class="app app-container">
@@ -540,9 +615,47 @@
     function appendMessage(role, text) {
       const msgDiv = document.createElement('div');
       msgDiv.className = `message ${role}`;
-      // Basic formatting for markdown-like bolding or newlines could go here
-      // For now just pre-wrap handling via CSS
-      msgDiv.textContent = text;
+
+      const contentDiv = document.createElement('div');
+
+      // Use marked.parse to render Markdown
+      try {
+        contentDiv.innerHTML = marked.parse(text);
+      } catch (e) {
+        console.error("Marked error:", e);
+        contentDiv.textContent = text;
+      }
+
+      msgDiv.appendChild(contentDiv);
+
+      // Add Copy Button for Assistant messages
+      if (role === 'assistant') {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy
+        `;
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(text).then(() => {
+            const originalHTML = copyBtn.innerHTML;
+            copyBtn.innerHTML = `
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Copied!
+            `;
+            setTimeout(() => {
+              copyBtn.innerHTML = originalHTML;
+            }, 2000);
+          });
+        };
+        msgDiv.appendChild(copyBtn);
+      }
+
       chatHistory.appendChild(msgDiv);
       chatHistory.scrollTop = chatHistory.scrollHeight;
       return msgDiv;

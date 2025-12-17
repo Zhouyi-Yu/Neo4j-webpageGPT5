@@ -294,7 +294,8 @@ def resolve_author(intent_obj: Dict[str, Any]):
         MATCH (r:Researcher)
         WHERE (toLower(r.name) = toLower($name) OR toLower(r.normalized_name) = toLower($name))
           AND (r.userId IS NOT NULL OR r.ccid IS NOT NULL)
-        RETURN r.userId AS userId, r.name AS name, r.normalized_name AS normalized_name
+        RETURN r.userId AS userId, coalesce(r.name, r.normalized_name) AS name, r.normalized_name AS normalized_name
+        ORDER BY r.name DESC
         LIMIT 1
         """
         exact_result = session.run(exact_cypher, name=author_name).single()
@@ -559,59 +560,98 @@ def answer_question(question: str) -> Dict[str, Any]:
     Returns a dict suitable for jsonify in Flask.
     """
     intent_obj = classify_intent(question)
+    intent_obj = normalize_intent(intent_obj)
 
-    # Branch 1: open / non-template questions → semantic-only fallback
-    if not (is_template_intent(intent_obj) and has_required_slots(intent_obj)):
-        intent_obj = normalize_intent(intent_obj)
+    # ~~~ STEP 1: AUTHOR RESOLUTION & INTENT PROMOTION ~~~
+    # We try to resolve the author strictly before deciding on the flow.
+    # This ensures that if we identify "Alan Wilman", we use the graph query even if the LLM said "OPEN_QUESTION".
 
-        # ~~~ AUTHOR DISCOVERY & FUZZY CHECK ~~~
-        # Even for open questions, if there's an author name (or we can extract one),
-        # we should try to resolve it to catch typos ("Possible Candidates").
-        author_to_check = intent_obj.get("author")
-        
-        # If classifier didn't find specific author, try forceful extraction
-        if not author_to_check:
-            try:
-                # We only try extraction if the question is short-ish or likely to contain a name.
-                # For safety, just try it.
-                extracted = call_llm(NAME_EXTRACTION_PROMPT, question).strip()
-                # Sanity: ignore common false positives or very short strings
-                if extracted and len(extracted) > 3 and " " in extracted: 
-                    author_to_check = extracted
-            except Exception as e:
-                print(f"Name extraction failed: {e}")
-        
-        if author_to_check:
-            # Try to resolve/fuzzy match
-            # We construct a temp intent just for resolution
-            temp_intent = dict(intent_obj)
-            temp_intent["author"] = author_to_check
-            
-            updated_intent, candidates = resolve_author(temp_intent)
-            
-            if candidates:
-                msg = (
-                    f"I couldn't find exact matches for '{author_to_check}', "
-                    "but I found similar researchers. Please select one:"
-                )
-                return {
-                    "answer": msg,
-                    "intent": updated_intent,
-                    "cypher": "",
-                    "dbRows": [],
-                    "semanticHits": [],
-                    "candidates": candidates,
-                }
-            
-            # If exact match found (candidates=None, but userId set), we can use it!
-            if updated_intent.get("authorUserId"):
-                intent_obj["author"] = updated_intent["author"]
-                intent_obj["authorUserId"] = updated_intent["authorUserId"]
-                # We could behave like a standard Author query now, but let's stick to semantic fallback
-                # but with the CORRECT name.
+    author_to_check = intent_obj.get("author")
+    
+    # If classifier didn't find specific author, try forceful extraction
+    if not author_to_check:
+        try:
+            # We only try extraction if the question is short-ish or likely to contain a name.
+            extracted = call_llm(NAME_EXTRACTION_PROMPT, question).strip()
+            # Sanity: ignore common false positives
+            if extracted and len(extracted) > 3: 
+                author_to_check = extracted
+        except Exception as e:
+            print(f"Name extraction failed: {e}")
 
-        # ~~~ END AUTHOR DISCOVERY ~~~
+    # If we have a name to check, run resolution
+    if author_to_check:
+        temp_intent = dict(intent_obj)
+        temp_intent["author"] = author_to_check
         
+        updated_intent, candidates = resolve_author(temp_intent)
+        
+        # A) Multiple Candidates Found -> Return immediately
+        if candidates and len(candidates) > 1:
+             msg = (
+                f"I couldn't find exact matches for '{author_to_check}', "
+                "but I found similar researchers. Please select one:"
+            )
+             return {
+                "answer": msg,
+                "intent": updated_intent,
+                "cypher": "",
+                "dbRows": [],
+                "semanticHits": [],
+                "candidates": candidates,
+            }
+        
+        # B) Single Match Found (Exact or Single Fuzzy)
+        elif updated_intent.get("authorUserId"):
+            intent_obj["author"] = updated_intent["author"]
+            intent_obj["authorUserId"] = updated_intent["authorUserId"]
+            
+            # CRITICAL FIX: If we found a valid author but intent is generic, PROMOTE it.
+            if intent_obj.get("intent") == "OPEN_QUESTION":
+                intent_obj["intent"] = "AUTHOR_PUBLICATIONS_RANGE"
+
+    # ~~~ STEP 2: BRANCHING LOGIC ~~~
+
+    # Branch A: Template-Driven Flow (Structured Graph Query)
+    # We take this if it's a known template AND we have the request slots (e.g. Author)
+    if is_template_intent(intent_obj) and has_required_slots(intent_obj):
+        
+        cypher = generate_cypher(intent_obj)
+        db_rows = run_cypher(cypher)
+
+        if intent_obj.get("intent") in TOPIC_INTENTS:
+            semantic_hits = semantic_search_publications(intent_obj.get("topic"))
+        else:
+            semantic_hits = []
+
+        # Fallback: if structured query returned nothing, try UAlberta semantic fallback
+        if not db_rows and not semantic_hits:
+            semantic_hits = semantic_search_uofa(question)
+
+        # Synthesize
+        answer_text = synthesize_answer(
+            question=question,
+            intent_obj=intent_obj,
+            cypher=cypher,
+            db_rows=db_rows,
+            semantic_hits=semantic_hits,
+        )
+        
+        # Second-pass if needed
+        if not db_rows and semantic_hits:
+             answer_text = recursive_semantic_answer(question, semantic_hits, answer_text)
+
+        return {
+            "answer": answer_text,
+            "intent": intent_obj,
+            "cypher": cypher,
+            "dbRows": db_rows,
+            "semanticHits": semantic_hits,
+        }
+
+    # Branch B: Semantic / Fallback Flow
+    # For open questions, or template intents where we missed a slot (e.g. unknown author)
+    else:
         # 1. Semantic Search (UAlberta authors only, limited fields)
         semantic_hits = semantic_search_uofa(question)
         
@@ -635,7 +675,7 @@ def answer_question(question: str) -> Dict[str, Any]:
             print(f"Error running author discovery cypher: {e}")
             author_rows = []
 
-        # 4. Synthesize Final Answer using Semantic Hits + Author Data
+        # 4. Synthesize Final Answer
         final_answer = synthesize_final_author_answer(question, semantic_hits, author_rows)
 
         return {
@@ -645,66 +685,6 @@ def answer_question(question: str) -> Dict[str, Any]:
             "dbRows": author_rows,
             "semanticHits": semantic_hits,
         }
-
-    # Branch 2: template-driven flow
-    intent_obj = normalize_intent(intent_obj)
-
-    # NEW STEP: resolve author; may return candidate list for ambiguous names
-    intent_obj, author_candidates = resolve_author(intent_obj)
-    intent_obj = normalize_intent(intent_obj)
-
-    # If we have multiple candidates, short-circuit and ask the user to choose
-    if author_candidates is not None and len(author_candidates) > 1:
-        # Keep answer short; UI will show the candidate list
-        typed_author = (intent_obj or {}).get("author")
-        msg = (
-            f"I found multiple researchers matching '{typed_author}'. "
-            "Please pick the correct one from the list."
-        )
-        return {
-            "answer": msg,
-            "intent": intent_obj,
-            "cypher": "",
-            "dbRows": [],
-            "semanticHits": [],
-            "candidates": author_candidates,
-        }
-
-    # Normal flow (either no author, or resolved to a single researcher)
-    cypher = generate_cypher(intent_obj)
-    db_rows = run_cypher(cypher)
-
-    if intent_obj.get("intent") in TOPIC_INTENTS:
-        semantic_hits = semantic_search_publications(intent_obj.get("topic"))
-    else:
-        semantic_hits = []
-
-    # If nothing came back from structured query and semantic hits are empty,
-    # run the UAlberta-only semantic fallback using the original question.
-    if not db_rows and not semantic_hits:
-        semantic_hits = semantic_search_uofa(question)
-
-    # 7) Synthesize final natural-language answer
-    answer_text = synthesize_answer(
-        question=question,
-        intent_obj=intent_obj,
-        cypher=cypher,
-        db_rows=db_rows,
-        semantic_hits=semantic_hits,
-    )
-
-    # If we still have no DB rows, run a second-pass answer using semantic hits (if any).
-    if not db_rows and semantic_hits:
-        answer_text = recursive_semantic_answer(question, semantic_hits, answer_text)
-
-    # 8) Return full payload for the frontend
-    return {
-        "answer": answer_text,
-        "intent": intent_obj,
-        "cypher": cypher,
-        "dbRows": db_rows,
-        "semanticHits": semantic_hits,
-    }
 
 # ───────────────────────────────────────────────────────────────
 # CLI TEST (optional)

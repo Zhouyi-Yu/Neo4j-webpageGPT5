@@ -68,6 +68,10 @@ def api_query():
 def index_html():
     return send_from_directory(BASE_DIR, "index.html")
 
+@app.route("/<path:filename>")
+def serve_static(filename):
+    return send_from_directory(BASE_DIR, filename)
+
 
 # ───────────────────────────────────────────────────────────────
 # GLOBAL ERROR HANDLERS (OPTIONAL)
