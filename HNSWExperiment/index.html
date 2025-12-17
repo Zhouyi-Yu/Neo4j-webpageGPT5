@@ -403,21 +403,30 @@
     .copy-btn {
       display: inline-flex;
       align-items: center;
-      gap: 0.3rem;
-      background: rgba(30, 41, 59, 0.5);
-      border: 1px solid #334155;
-      border-radius: 0.3rem;
-      color: #9ca3af;
-      padding: 0.3rem 0.6rem;
-      font-size: 0.75rem;
+      gap: 0.4rem;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid #475569;
+      border-radius: 0.4rem;
+      color: #cbd5e1;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.8rem;
       cursor: pointer;
-      margin-top: 0.75rem;
-      transition: all 0.2s;
+      margin-top: 0.85rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
 
     .copy-btn:hover {
-      background: #334155;
+      background: #475569;
       color: #fff;
+      border-color: #64748b;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .copy-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     }
 
     /* Override textarea styles for chat input */
@@ -486,6 +495,140 @@
       h1 {
         font-size: 1.5rem;
       }
+    }
+
+    /* Debug Log Modal */
+    .debug-log-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .debug-log-modal.open {
+      display: flex;
+    }
+
+    .debug-log-content {
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 1rem;
+      width: 90%;
+      max-width: 1000px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+    }
+
+    .debug-log-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .debug-log-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+
+    .debug-log-close {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #9ca3af;
+      border-radius: 0.5rem;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    .debug-log-close:hover {
+      background: #334155;
+      color: #fff;
+    }
+
+    .debug-log-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+    }
+
+    .debug-log-entry {
+      background: #0b1224;
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .debug-log-entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .debug-log-timestamp {
+      font-size: 0.85rem;
+      color: #64748b;
+      font-family: monospace;
+    }
+
+    .debug-log-section {
+      margin-bottom: 1rem;
+    }
+
+    .debug-log-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .debug-log-section-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #9ca3af;
+      margin-bottom: 0.5rem;
+    }
+
+    .debug-log-section-content {
+      background: #020617;
+      border: 1px solid #111827;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .debug-log-btn {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.6rem 1rem;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #9ca3af;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    .debug-log-btn:hover {
+      background: #334155;
+      color: #fff;
     }
   </style>
   <!-- Marked.js for Markdown rendering -->
@@ -596,7 +739,24 @@
           <pre id="semanticHitsText">–</pre>
         </details>
       </div>
+
+      <button class="debug-log-btn" id="debugLogBtn">View Debug Log</button>
     </aside>
+  </div>
+
+  <!-- Debug Log Modal -->
+  <div class="debug-log-modal" id="debugLogModal">
+    <div class="debug-log-content">
+      <div class="debug-log-header">
+        <h2>Debug Log</h2>
+        <button class="debug-log-close" id="debugLogClose">Close</button>
+      </div>
+      <div class="debug-log-body" id="debugLogBody">
+        <div style="text-align: center; color: #64748b; padding: 2rem;">
+          Loading debug log...
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -763,6 +923,9 @@
         dbRowsText.textContent = data.dbRows ? JSON.stringify(data.dbRows, null, 2) : "[]";
         semanticHitsText.textContent = data.semanticHits ? JSON.stringify(data.semanticHits, null, 2) : "[]";
 
+        // Log debug information to file
+        logDebugEntry(question, data);
+
         // 3. Handle Candidates (Disambiguation)
         if (data.candidates && data.candidates.length > 0) {
           const assistantMsg = appendMessage('assistant', data.answer || "I found multiple researchers. Please select one:");
@@ -804,6 +967,131 @@
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         askQuestion();
+      }
+    });
+
+    // Debug Log Functionality
+    const debugLogBtn = document.getElementById('debugLogBtn');
+    const debugLogModal = document.getElementById('debugLogModal');
+    const debugLogClose = document.getElementById('debugLogClose');
+    const debugLogBody = document.getElementById('debugLogBody');
+
+    async function logDebugEntry(question, data) {
+      const entry = {
+        timestamp: new Date().toISOString(),
+        question: question,
+        answer: data.answer || '',
+        intent: data.intent || {},
+        cypher: data.cypher || '',
+        dbRows: data.dbRows || [],
+        semanticHits: data.semanticHits || []
+      };
+
+      try {
+        await fetch('/api/log-debug', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry)
+        });
+      } catch (err) {
+        console.error('Failed to log debug entry:', err);
+      }
+    }
+
+    async function loadDebugLog() {
+      try {
+        const res = await fetch('/api/debug-log');
+        if (!res.ok) throw new Error('Failed to load debug log');
+
+        const text = await res.text();
+        if (!text.trim()) {
+          debugLogBody.innerHTML = '<div style="text-align: center; color: #64748b; padding: 2rem;">No debug entries yet.</div>';
+          return;
+        }
+
+        const entries = text.trim().split('\n').filter(line => line.trim()).map(line => {
+          try {
+            return JSON.parse(line);
+          } catch (e) {
+            return null;
+          }
+        }).filter(e => e !== null);
+
+        if (entries.length === 0) {
+          debugLogBody.innerHTML = '<div style="text-align: center; color: #64748b; padding: 2rem;">No debug entries yet.</div>';
+          return;
+        }
+
+        // Reverse to show newest first
+        entries.reverse();
+
+        debugLogBody.innerHTML = entries.map(entry => {
+          const date = new Date(entry.timestamp);
+          const formattedDate = date.toLocaleString();
+
+          return `
+            <div class="debug-log-entry">
+              <div class="debug-log-entry-header">
+                <div class="debug-log-timestamp">${formattedDate}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Question</div>
+                <div class="debug-log-section-content">${escapeHtml(entry.question || '')}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Answer</div>
+                <div class="debug-log-section-content">${escapeHtml(entry.answer || '')}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Intent (classifier output)</div>
+                <div class="debug-log-section-content">${escapeHtml(JSON.stringify(entry.intent, null, 2))}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Cypher (generated query)</div>
+                <div class="debug-log-section-content">${escapeHtml(entry.cypher || '–')}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">DB rows (graph query results)</div>
+                <div class="debug-log-section-content">${escapeHtml(JSON.stringify(entry.dbRows, null, 2))}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Semantic hits (vector search)</div>
+                <div class="debug-log-section-content">${escapeHtml(JSON.stringify(entry.semanticHits, null, 2))}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Error loading debug log:', err);
+        debugLogBody.innerHTML = '<div style="text-align: center; color: #f97373; padding: 2rem;">Error loading debug log.</div>';
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    debugLogBtn.addEventListener('click', () => {
+      debugLogModal.classList.add('open');
+      loadDebugLog();
+    });
+
+    debugLogClose.addEventListener('click', () => {
+      debugLogModal.classList.remove('open');
+    });
+
+    // Close modal when clicking outside
+    debugLogModal.addEventListener('click', (e) => {
+      if (e.target === debugLogModal) {
+        debugLogModal.classList.remove('open');
       }
     });
   </script>

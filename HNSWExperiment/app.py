@@ -14,6 +14,8 @@ Endpoints:
 """
 
 import os
+import json
+from datetime import datetime
 
 from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.exceptions import HTTPException
@@ -26,6 +28,9 @@ app = Flask(__name__)
 
 # Base directory for serving index.html
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Debug log file path
+DEBUG_LOG_FILE = os.path.join(BASE_DIR, "debug_log.txt")
 
 
 # ───────────────────────────────────────────────────────────────
@@ -71,6 +76,44 @@ def index_html():
 @app.route("/<path:filename>")
 def serve_static(filename):
     return send_from_directory(BASE_DIR, filename)
+
+
+@app.route("/api/log-debug", methods=["POST"])
+def log_debug():
+    """
+    Append a debug entry to the debug_log.txt file.
+    Expects JSON with: timestamp, question, answer, intent, cypher, dbRows, semanticHits
+    """
+    data = request.get_json(silent=True) or {}
+    
+    try:
+        # Append the entry as a single JSON line
+        with open(DEBUG_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(data, ensure_ascii=False) + "\n")
+        
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        app.logger.exception("Error writing to debug log")
+        return jsonify({"error": "Failed to write debug log", "detail": str(e)}), 500
+
+
+@app.route("/api/debug-log", methods=["GET"])
+def get_debug_log():
+    """
+    Retrieve the contents of the debug_log.txt file.
+    Returns the raw text content (newline-delimited JSON).
+    """
+    try:
+        if not os.path.exists(DEBUG_LOG_FILE):
+            return "", 200
+        
+        with open(DEBUG_LOG_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        return content, 200, {"Content-Type": "text/plain; charset=utf-8"}
+    except Exception as e:
+        app.logger.exception("Error reading debug log")
+        return jsonify({"error": "Failed to read debug log", "detail": str(e)}), 500
 
 
 # ───────────────────────────────────────────────────────────────
