@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neo4j Research Q&A System - Control Flow Graph</title>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .controls {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .controls button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        #cy {
+            width: 100%;
+            height: 800px;
+            background: #fafafa;
+        }
+
+        .legend {
+            background: white;
+            padding: 20px 30px;
+            border-top: 2px solid #e9ecef;
+        }
+
+        .legend h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+            font-size: 1.3em;
+        }
+
+        .legend-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            border: 2px solid #dee2e6;
+        }
+
+        .legend-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .stats {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            border-top: 2px solid #e9ecef;
+        }
+
+        .stats h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+            font-size: 1.3em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            #cy {
+                height: 600px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 Control Flow Graph</h1>
+            <p>Neo4j Research Q&A System - Interactive Visualization</p>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" onclick="resetLayout()">🔄 Reset Layout</button>
+            <button class="btn-secondary" onclick="fitGraph()">🔍 Fit to Screen</button>
+            <button class="btn-success" onclick="exportPNG()">📸 Export PNG</button>
+            <button class="btn-secondary" onclick="toggleLabels()">🏷️ Toggle Labels</button>
+        </div>
+
+        <div id="cy"></div>
+
+        <div class="legend">
+            <h3>📊 Node Types</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4CAF50;"></div>
+                    <span class="legend-label">Entry/Exit Points</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2196F3;"></div>
+                    <span class="legend-label">Process/LLM Calls</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF9800;"></div>
+                    <span class="legend-label">Decision Points</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9C27B0;"></div>
+                    <span class="legend-label">Database Operations</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #F44336;"></div>
+                    <span class="legend-label">Output/Return</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats">
+            <h3>📈 Graph Statistics</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-nodes">-</div>
+                    <div class="stat-label">Total Nodes</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-edges">-</div>
+                    <div class="stat-label">Total Edges</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-decisions">-</div>
+                    <div class="stat-label">Decision Points</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-llm">-</div>
+                    <div class="stat-label">LLM Calls</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Embedded CFG Data -->
+    <script id="cfg-data" type="application/json">
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "type": "entry",
+      "label": "User Question Input",
+      "color": "#4CAF50",
+      "id": "START"
+    },
+    {
+      "type": "process",
+      "label": "Classify Intent\n(LLM Call)",
+      "color": "#2196F3",
+      "id": "classify_intent"
+    },
+    {
+      "type": "process",
+      "label": "Normalize Intent\n(Expand Departments)",
+      "color": "#2196F3",
+      "id": "normalize_intent"
+    },
+    {
+      "type": "decision",
+      "label": "Selected User ID\nProvided?",
+      "color": "#FF9800",
+      "id": "check_selected_user"
+    },
+    {
+      "type": "process",
+      "label": "Set authorUserId\nPromote to AUTHOR_MAIN",
+      "color": "#2196F3",
+      "id": "set_user_id"
+    },
+    {
+      "type": "decision",
+      "label": "Author Field\nPresent?",
+      "color": "#FF9800",
+      "id": "check_author_field"
+    },
+    {
+      "type": "process",
+      "label": "Extract Name\n(LLM Call)",
+      "color": "#2196F3",
+      "id": "extract_name"
+    },
+    {
+      "type": "process",
+      "label": "Resolve Author\n(Exact + Fuzzy Search)",
+      "color": "#2196F3",
+      "id": "resolve_author"
+    },
+    {
+      "type": "decision",
+      "label": "Multiple\nCandidates?",
+      "color": "#FF9800",
+      "id": "check_candidates"
+    },
+    {
+      "type": "output",
+      "label": "Return Candidate List\nfor User Selection",
+      "color": "#F44336",
+      "id": "return_candidates"
+    },
+    {
+      "type": "decision",
+      "label": "Single Match\nFound?",
+      "color": "#FF9800",
+      "id": "check_single_match"
+    },
+    {
+      "type": "process",
+      "label": "Set Author Info\n& UserId",
+      "color": "#2196F3",
+      "id": "set_author_info"
+    },
+    {
+      "type": "decision",
+      "label": "Intent is\nOPEN_QUESTION?",
+      "color": "#FF9800",
+      "id": "promote_intent"
+    },
+    {
+      "type": "process",
+      "label": "Promote to\nAUTHOR_PUBLICATIONS",
+      "color": "#2196F3",
+      "id": "promote_to_author"
+    },
+    {
+      "type": "decision",
+      "label": "Is Template Intent\n& Has Required Slots?",
+      "color": "#FF9800",
+      "id": "check_template"
+    },
+    {
+      "type": "process",
+      "label": "Generate Cypher\n(LLM Call)",
+      "color": "#2196F3",
+      "id": "generate_cypher"
+    },
+    {
+      "type": "process",
+      "label": "Run Cypher Query\n(Neo4j)",
+      "color": "#9C27B0",
+      "id": "run_cypher"
+    },
+    {
+      "type": "decision",
+      "label": "Is Topic\nIntent?",
+      "color": "#FF9800",
+      "id": "check_topic_intent"
+    },
+    {
+      "type": "process",
+      "label": "Semantic Search\nPublications (Vector)",
+      "color": "#9C27B0",
+      "id": "semantic_search_topic"
+    },
+    {
+      "type": "decision",
+      "label": "DB Rows or\nSemantic Hits?",
+      "color": "#FF9800",
+      "id": "check_empty_results"
+    },
+    {
+      "type": "process",
+      "label": "Semantic Search UofA\n(Fallback)",
+      "color": "#9C27B0",
+      "id": "semantic_fallback"
+    },
+    {
+      "type": "process",
+      "label": "Synthesize Answer\n(LLM Call)",
+      "color": "#2196F3",
+      "id": "synthesize_answer"
+    },
+    {
+      "type": "decision",
+      "label": "No DB Rows but\nSemantic Hits?",
+      "color": "#FF9800",
+      "id": "check_second_pass"
+    },
+    {
+      "type": "process",
+      "label": "Recursive Semantic\nAnswer (LLM)",
+      "color": "#2196F3",
+      "id": "recursive_semantic"
+    },
+    {
+      "type": "output",
+      "label": "Return Template\nResult",
+      "color": "#4CAF50",
+      "id": "return_template_result"
+    },
+    {
+      "type": "process",
+      "label": "Semantic Search UofA\n(Vector)",
+      "color": "#9C27B0",
+      "id": "semantic_search_uofa"
+    },
+    {
+      "type": "decision",
+      "label": "Semantic Hits\nFound?",
+      "color": "#FF9800",
+      "id": "check_semantic_hits"
+    },
+    {
+      "type": "output",
+      "label": "Return 'No Results'",
+      "color": "#F44336",
+      "id": "return_no_results"
+    },
+    {
+      "type": "process",
+      "label": "Generate Author\nCypher (LLM)",
+      "color": "#2196F3",
+      "id": "generate_author_cypher"
+    },
+    {
+      "type": "process",
+      "label": "Run Author Cypher\n(Neo4j)",
+      "color": "#9C27B0",
+      "id": "run_author_cypher"
+    },
+    {
+      "type": "process",
+      "label": "Synthesize Final\nAuthor Answer (LLM)",
+      "color": "#2196F3",
+      "id": "synthesize_final_author"
+    },
+    {
+      "type": "output",
+      "label": "Return Semantic\nResult",
+      "color": "#4CAF50",
+      "id": "return_semantic_result"
+    },
+    {
+      "type": "exit",
+      "label": "Response to User",
+      "color": "#4CAF50",
+      "id": "END"
+    }
+  ],
+  "links": [
+    {
+      "source": "START",
+      "target": "classify_intent"
+    },
+    {
+      "source": "classify_intent",
+      "target": "normalize_intent"
+    },
+    {
+      "source": "normalize_intent",
+      "target": "check_selected_user"
+    },
+    {
+      "label": "Yes",
+      "source": "check_selected_user",
+      "target": "set_user_id"
+    },
+    {
+      "label": "No",
+      "source": "check_selected_user",
+      "target": "check_author_field"
+    },
+    {
+      "source": "set_user_id",
+      "target": "check_template"
+    },
+    {
+      "label": "Yes",
+      "source": "check_author_field",
+      "target": "resolve_author"
+    },
+    {
+      "label": "No",
+      "source": "check_author_field",
+      "target": "extract_name"
+    },
+    {
+      "source": "extract_name",
+      "target": "resolve_author"
+    },
+    {
+      "source": "resolve_author",
+      "target": "check_candidates"
+    },
+    {
+      "label": "Yes (>1)",
+      "source": "check_candidates",
+      "target": "return_candidates"
+    },
+    {
+      "label": "No",
+      "source": "check_candidates",
+      "target": "check_single_match"
+    },
+    {
+      "source": "return_candidates",
+      "target": "END"
+    },
+    {
+      "label": "Yes",
+      "source": "check_single_match",
+      "target": "set_author_info"
+    },
+    {
+      "label": "No",
+      "source": "check_single_match",
+      "target": "check_template"
+    },
+    {
+      "source": "set_author_info",
+      "target": "promote_intent"
+    },
+    {
+      "label": "Yes",
+      "source": "promote_intent",
+      "target": "promote_to_author"
+    },
+    {
+      "label": "No",
+      "source": "promote_intent",
+      "target": "check_template"
+    },
+    {
+      "source": "promote_to_author",
+      "target": "check_template"
+    },
+    {
+      "label": "Yes",
+      "source": "check_template",
+      "target": "generate_cypher"
+    },
+    {
+      "label": "No",
+      "source": "check_template",
+      "target": "semantic_search_uofa"
+    },
+    {
+      "source": "generate_cypher",
+      "target": "run_cypher"
+    },
+    {
+      "source": "run_cypher",
+      "target": "check_topic_intent"
+    },
+    {
+      "label": "Yes",
+      "source": "check_topic_intent",
+      "target": "semantic_search_topic"
+    },
+    {
+      "label": "No",
+      "source": "check_topic_intent",
+      "target": "check_empty_results"
+    },
+    {
+      "source": "semantic_search_topic",
+      "target": "check_empty_results"
+    },
+    {
+      "label": "No",
+      "source": "check_empty_results",
+      "target": "semantic_fallback"
+    },
+    {
+      "label": "Yes",
+      "source": "check_empty_results",
+      "target": "synthesize_answer"
+    },
+    {
+      "source": "semantic_fallback",
+      "target": "synthesize_answer"
+    },
+    {
+      "source": "synthesize_answer",
+      "target": "check_second_pass"
+    },
+    {
+      "label": "Yes",
+      "source": "check_second_pass",
+      "target": "recursive_semantic"
+    },
+    {
+      "label": "No",
+      "source": "check_second_pass",
+      "target": "return_template_result"
+    },
+    {
+      "source": "recursive_semantic",
+      "target": "return_template_result"
+    },
+    {
+      "source": "return_template_result",
+      "target": "END"
+    },
+    {
+      "source": "semantic_search_uofa",
+      "target": "check_semantic_hits"
+    },
+    {
+      "label": "No",
+      "source": "check_semantic_hits",
+      "target": "return_no_results"
+    },
+    {
+      "label": "Yes",
+      "source": "check_semantic_hits",
+      "target": "generate_author_cypher"
+    },
+    {
+      "source": "return_no_results",
+      "target": "END"
+    },
+    {
+      "source": "generate_author_cypher",
+      "target": "run_author_cypher"
+    },
+    {
+      "source": "run_author_cypher",
+      "target": "synthesize_final_author"
+    },
+    {
+      "source": "synthesize_final_author",
+      "target": "return_semantic_result"
+    },
+    {
+      "source": "return_semantic_result",
+      "target": "END"
+    }
+  ]
+}
+    </script>
+
+    <script>
+        // Load the graph data from the JSON file
+        // For this demo, we'll embed the data directly
+        // In production, you would fetch('system_cfg.json')
+
+        let cy;
+        let showLabels = true;
+
+        function initGraph() {
+            console.log("Initializing graph...");
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'background-color': 'data(color)',
+                            'label': 'data(label)',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'text-wrap': 'wrap',
+                            'text-max-width': '120px',
+                            'font-size': '11px',
+                            'font-weight': '600',
+                            'color': '#fff',
+                            'text-outline-color': 'data(color)',
+                            'text-outline-width': 2,
+                            'width': 'label',
+                            'height': 'label',
+                            'padding': '15px',
+                            'shape': 'roundrectangle',
+                            'border-width': 2,
+                            'border-color': '#333'
+                        }
+                    },
+                    {
+                        selector: 'node[type="decision"]',
+                        style: {
+                            'shape': 'diamond',
+                            'width': '100px',
+                            'height': '100px'
+                        }
+                    },
+                    {
+                        selector: 'node[type="entry"], node[type="exit"]',
+                        style: {
+                            'shape': 'ellipse',
+                            'border-width': 4
+                        }
+                    },
+                    {
+                        selector: 'node[type="output"]',
+                        style: {
+                            'shape': 'parallelogram'
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 3,
+                            'line-color': '#999',
+                            'target-arrow-color': '#999',
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier',
+                            'label': 'data(label)',
+                            'font-size': '10px',
+                            'text-background-color': '#fff',
+                            'text-background-opacity': 0.8,
+                            'text-background-padding': '3px',
+                            'color': '#333',
+                            'font-weight': '600'
+                        }
+                    },
+                    {
+                        selector: ':selected',
+                        style: {
+                            'border-width': 4,
+                            'border-color': '#FFD700',
+                            'line-color': '#FFD700',
+                            'target-arrow-color': '#FFD700'
+                        }
+                    }
+                ]
+            });
+
+            // Load data from external JSON or create inline
+            loadGraphData();
+
+            // Update statistics
+            updateStatistics();
+        }
+
+        function loadGraphData() {
+            try {
+                const dataElement = document.getElementById('cfg-data');
+                const rawData = JSON.parse(dataElement.textContent);
+                console.log("Graph data loaded:", rawData);
+
+                const elements = [];
+
+                // Transform nodes
+                rawData.nodes.forEach(node => {
+                    elements.push({
+                        data: {
+                            id: node.id,
+                            label: node.label,
+                            type: node.type,
+                            color: node.color || '#2196F3'
+                        }
+                    });
+                });
+
+                // Transform links
+                rawData.links.forEach(link => {
+                    elements.push({
+                        data: {
+                            source: link.source,
+                            target: link.target,
+                            label: link.label || ''
+                        }
+                    });
+                });
+
+                cy.add(elements);
+
+                // Try Dagre layout
+                const layout = cy.layout({
+                    name: 'dagre',
+                    rankDir: 'TB',
+                    nodeSep: 50,
+                    rankSep: 100,
+                    padding: 30
+                });
+
+                layout.on('layoutstop', () => {
+                    console.log("Layout finished.");
+                    cy.fit(null, 50);
+                });
+
+                layout.run();
+
+            } catch (err) {
+                console.error("Error loading graph data:", err);
+                // Fallback layout if dagre fails
+                cy.layout({ name: 'cose' }).run();
+            }
+        }
+
+        function resetLayout() {
+            cy.layout({
+                name: 'dagre',
+                rankDir: 'TB',
+                nodeSep: 50,
+                rankSep: 100,
+                padding: 30
+            }).run();
+        }
+
+        function fitGraph() {
+            cy.fit(null, 50);
+        }
+
+        function exportPNG() {
+            const png = cy.png({ full: true, scale: 2 });
+            const link = document.createElement('a');
+            link.download = 'cfg_diagram.png';
+            link.href = png;
+            link.click();
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            if (showLabels) {
+                cy.style().selector('node').style('label', 'data(label)').update();
+                cy.style().selector('edge').style('label', 'data(label)').update();
+            } else {
+                cy.style().selector('node').style('label', '').update();
+                cy.style().selector('edge').style('label', '').update();
+            }
+        }
+
+        function updateStatistics() {
+            const nodes = cy.nodes();
+            const edges = cy.edges();
+            const decisions = nodes.filter('[type="decision"]');
+            const llmCalls = nodes.filter(node => {
+                const label = node.data('label') || '';
+                return label.includes('LLM');
+            });
+
+            document.getElementById('stat-nodes').textContent = nodes.length;
+            document.getElementById('stat-edges').textContent = edges.length;
+            document.getElementById('stat-decisions').textContent = decisions.length;
+            document.getElementById('stat-llm').textContent = llmCalls.length;
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', initGraph);
+    </script>
+</body>
+
+</html>

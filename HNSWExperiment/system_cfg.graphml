@@ -1,0 +1,286 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+  <key id="d3" for="edge" attr.name="label" attr.type="string" />
+  <key id="d2" for="node" attr.name="color" attr.type="string" />
+  <key id="d1" for="node" attr.name="label" attr.type="string" />
+  <key id="d0" for="node" attr.name="type" attr.type="string" />
+  <graph edgedefault="directed">
+    <node id="START">
+      <data key="d0">entry</data>
+      <data key="d1">User Question Input</data>
+      <data key="d2">#4CAF50</data>
+    </node>
+    <node id="classify_intent">
+      <data key="d0">process</data>
+      <data key="d1">Classify Intent
+(LLM Call)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="normalize_intent">
+      <data key="d0">process</data>
+      <data key="d1">Normalize Intent
+(Expand Departments)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="check_selected_user">
+      <data key="d0">decision</data>
+      <data key="d1">Selected User ID
+Provided?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="set_user_id">
+      <data key="d0">process</data>
+      <data key="d1">Set authorUserId
+Promote to AUTHOR_MAIN</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="check_author_field">
+      <data key="d0">decision</data>
+      <data key="d1">Author Field
+Present?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="extract_name">
+      <data key="d0">process</data>
+      <data key="d1">Extract Name
+(LLM Call)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="resolve_author">
+      <data key="d0">process</data>
+      <data key="d1">Resolve Author
+(Exact + Fuzzy Search)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="check_candidates">
+      <data key="d0">decision</data>
+      <data key="d1">Multiple
+Candidates?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="return_candidates">
+      <data key="d0">output</data>
+      <data key="d1">Return Candidate List
+for User Selection</data>
+      <data key="d2">#F44336</data>
+    </node>
+    <node id="check_single_match">
+      <data key="d0">decision</data>
+      <data key="d1">Single Match
+Found?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="set_author_info">
+      <data key="d0">process</data>
+      <data key="d1">Set Author Info
+&amp; UserId</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="promote_intent">
+      <data key="d0">decision</data>
+      <data key="d1">Intent is
+OPEN_QUESTION?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="promote_to_author">
+      <data key="d0">process</data>
+      <data key="d1">Promote to
+AUTHOR_PUBLICATIONS</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="check_template">
+      <data key="d0">decision</data>
+      <data key="d1">Is Template Intent
+&amp; Has Required Slots?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="generate_cypher">
+      <data key="d0">process</data>
+      <data key="d1">Generate Cypher
+(LLM Call)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="run_cypher">
+      <data key="d0">process</data>
+      <data key="d1">Run Cypher Query
+(Neo4j)</data>
+      <data key="d2">#9C27B0</data>
+    </node>
+    <node id="check_topic_intent">
+      <data key="d0">decision</data>
+      <data key="d1">Is Topic
+Intent?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="semantic_search_topic">
+      <data key="d0">process</data>
+      <data key="d1">Semantic Search
+Publications (Vector)</data>
+      <data key="d2">#9C27B0</data>
+    </node>
+    <node id="check_empty_results">
+      <data key="d0">decision</data>
+      <data key="d1">DB Rows or
+Semantic Hits?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="semantic_fallback">
+      <data key="d0">process</data>
+      <data key="d1">Semantic Search UofA
+(Fallback)</data>
+      <data key="d2">#9C27B0</data>
+    </node>
+    <node id="synthesize_answer">
+      <data key="d0">process</data>
+      <data key="d1">Synthesize Answer
+(LLM Call)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="check_second_pass">
+      <data key="d0">decision</data>
+      <data key="d1">No DB Rows but
+Semantic Hits?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="recursive_semantic">
+      <data key="d0">process</data>
+      <data key="d1">Recursive Semantic
+Answer (LLM)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="return_template_result">
+      <data key="d0">output</data>
+      <data key="d1">Return Template
+Result</data>
+      <data key="d2">#4CAF50</data>
+    </node>
+    <node id="semantic_search_uofa">
+      <data key="d0">process</data>
+      <data key="d1">Semantic Search UofA
+(Vector)</data>
+      <data key="d2">#9C27B0</data>
+    </node>
+    <node id="check_semantic_hits">
+      <data key="d0">decision</data>
+      <data key="d1">Semantic Hits
+Found?</data>
+      <data key="d2">#FF9800</data>
+    </node>
+    <node id="return_no_results">
+      <data key="d0">output</data>
+      <data key="d1">Return 'No Results'</data>
+      <data key="d2">#F44336</data>
+    </node>
+    <node id="generate_author_cypher">
+      <data key="d0">process</data>
+      <data key="d1">Generate Author
+Cypher (LLM)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="run_author_cypher">
+      <data key="d0">process</data>
+      <data key="d1">Run Author Cypher
+(Neo4j)</data>
+      <data key="d2">#9C27B0</data>
+    </node>
+    <node id="synthesize_final_author">
+      <data key="d0">process</data>
+      <data key="d1">Synthesize Final
+Author Answer (LLM)</data>
+      <data key="d2">#2196F3</data>
+    </node>
+    <node id="return_semantic_result">
+      <data key="d0">output</data>
+      <data key="d1">Return Semantic
+Result</data>
+      <data key="d2">#4CAF50</data>
+    </node>
+    <node id="END">
+      <data key="d0">exit</data>
+      <data key="d1">Response to User</data>
+      <data key="d2">#4CAF50</data>
+    </node>
+    <edge source="START" target="classify_intent" />
+    <edge source="classify_intent" target="normalize_intent" />
+    <edge source="normalize_intent" target="check_selected_user" />
+    <edge source="check_selected_user" target="set_user_id">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="check_selected_user" target="check_author_field">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="set_user_id" target="check_template" />
+    <edge source="check_author_field" target="resolve_author">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="check_author_field" target="extract_name">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="extract_name" target="resolve_author" />
+    <edge source="resolve_author" target="check_candidates" />
+    <edge source="check_candidates" target="return_candidates">
+      <data key="d3">Yes (&gt;1)</data>
+    </edge>
+    <edge source="check_candidates" target="check_single_match">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="return_candidates" target="END" />
+    <edge source="check_single_match" target="set_author_info">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="check_single_match" target="check_template">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="set_author_info" target="promote_intent" />
+    <edge source="promote_intent" target="promote_to_author">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="promote_intent" target="check_template">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="promote_to_author" target="check_template" />
+    <edge source="check_template" target="generate_cypher">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="check_template" target="semantic_search_uofa">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="generate_cypher" target="run_cypher" />
+    <edge source="run_cypher" target="check_topic_intent" />
+    <edge source="check_topic_intent" target="semantic_search_topic">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="check_topic_intent" target="check_empty_results">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="semantic_search_topic" target="check_empty_results" />
+    <edge source="check_empty_results" target="semantic_fallback">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="check_empty_results" target="synthesize_answer">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="semantic_fallback" target="synthesize_answer" />
+    <edge source="synthesize_answer" target="check_second_pass" />
+    <edge source="check_second_pass" target="recursive_semantic">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="check_second_pass" target="return_template_result">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="recursive_semantic" target="return_template_result" />
+    <edge source="return_template_result" target="END" />
+    <edge source="semantic_search_uofa" target="check_semantic_hits" />
+    <edge source="check_semantic_hits" target="return_no_results">
+      <data key="d3">No</data>
+    </edge>
+    <edge source="check_semantic_hits" target="generate_author_cypher">
+      <data key="d3">Yes</data>
+    </edge>
+    <edge source="return_no_results" target="END" />
+    <edge source="generate_author_cypher" target="run_author_cypher" />
+    <edge source="run_author_cypher" target="synthesize_final_author" />
+    <edge source="synthesize_final_author" target="return_semantic_result" />
+    <edge source="return_semantic_result" target="END" />
+  </graph>
+</graphml>

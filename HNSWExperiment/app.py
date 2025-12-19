@@ -17,7 +17,7 @@ import os
 import json
 from datetime import datetime
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, session
 from werkzeug.exceptions import HTTPException
 
 # Import your multi-stage pipeline (same folder as this app.py)
@@ -25,6 +25,9 @@ from backend import answer_question
 
 # Create Flask app
 app = Flask(__name__)
+
+# Secret key for session management (in production, use env variable)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key-change-in-production")
 
 # Base directory for serving index.html
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -57,8 +60,26 @@ def api_query():
     if not question:
         return jsonify({"error": "Missing 'question' in request body."}), 400
 
+    # Get optional selected_user_id from candidate selection
+    selected_user_id = data.get("selected_user_id")
+
     try:
-        result = answer_question(question)
+        # Get conversation history from session (list of {role, content} dicts)
+        conversation_history = session.get("conversation_history", [])
+        
+        # Call backend with history and optional selected_user_id
+        result = answer_question(question, conversation_history, selected_user_id)
+        
+        # Update conversation history with this Q&A pair
+        # Add user question
+        conversation_history.append({"role": "user", "content": question})
+        # Add assistant answer
+        conversation_history.append({"role": "assistant", "content": result.get("answer", "")})
+        
+        # Keep only last 10 messages (5 Q&A pairs) to prevent session bloat
+        conversation_history = conversation_history[-10:]
+        session["conversation_history"] = conversation_history
+        
         # result is already a dict with:
         #   answer, intent, cypher, dbRows, semanticHits
         return jsonify(result), 200

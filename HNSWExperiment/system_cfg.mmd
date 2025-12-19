@@ -1,0 +1,83 @@
+flowchart TD
+    START([User Question Input])
+    classify_intent[Classify Intent<br/>(LLM Call)]
+    normalize_intent[Normalize Intent<br/>(Expand Departments)]
+    check_selected_user{Selected User ID<br/>Provided?}
+    set_user_id[Set authorUserId<br/>Promote to AUTHOR_MAIN]
+    check_author_field{Author Field<br/>Present?}
+    extract_name[Extract Name<br/>(LLM Call)]
+    resolve_author[Resolve Author<br/>(Exact + Fuzzy Search)]
+    check_candidates{Multiple<br/>Candidates?}
+    return_candidates[/Return Candidate List<br/>for User Selection/]
+    check_single_match{Single Match<br/>Found?}
+    set_author_info[Set Author Info<br/>& UserId]
+    promote_intent{Intent is<br/>OPEN_QUESTION?}
+    promote_to_author[Promote to<br/>AUTHOR_PUBLICATIONS]
+    check_template{Is Template Intent<br/>& Has Required Slots?}
+    generate_cypher[Generate Cypher<br/>(LLM Call)]
+    run_cypher[Run Cypher Query<br/>(Neo4j)]
+    check_topic_intent{Is Topic<br/>Intent?}
+    semantic_search_topic[Semantic Search<br/>Publications (Vector)]
+    check_empty_results{DB Rows or<br/>Semantic Hits?}
+    semantic_fallback[Semantic Search UofA<br/>(Fallback)]
+    synthesize_answer[Synthesize Answer<br/>(LLM Call)]
+    check_second_pass{No DB Rows but<br/>Semantic Hits?}
+    recursive_semantic[Recursive Semantic<br/>Answer (LLM)]
+    return_template_result[/Return Template<br/>Result/]
+    semantic_search_uofa[Semantic Search UofA<br/>(Vector)]
+    check_semantic_hits{Semantic Hits<br/>Found?}
+    return_no_results[/Return 'No Results'/]
+    generate_author_cypher[Generate Author<br/>Cypher (LLM)]
+    run_author_cypher[Run Author Cypher<br/>(Neo4j)]
+    synthesize_final_author[Synthesize Final<br/>Author Answer (LLM)]
+    return_semantic_result[/Return Semantic<br/>Result/]
+    END([Response to User])
+
+    START --> classify_intent
+    classify_intent --> normalize_intent
+    normalize_intent --> check_selected_user
+    check_selected_user -->|Yes| set_user_id
+    check_selected_user -->|No| check_author_field
+    set_user_id --> check_template
+    check_author_field -->|Yes| resolve_author
+    check_author_field -->|No| extract_name
+    extract_name --> resolve_author
+    resolve_author --> check_candidates
+    check_candidates -->|Yes (>1)| return_candidates
+    check_candidates -->|No| check_single_match
+    return_candidates --> END
+    check_single_match -->|Yes| set_author_info
+    check_single_match -->|No| check_template
+    set_author_info --> promote_intent
+    promote_intent -->|Yes| promote_to_author
+    promote_intent -->|No| check_template
+    promote_to_author --> check_template
+    check_template -->|Yes| generate_cypher
+    check_template -->|No| semantic_search_uofa
+    generate_cypher --> run_cypher
+    run_cypher --> check_topic_intent
+    check_topic_intent -->|Yes| semantic_search_topic
+    check_topic_intent -->|No| check_empty_results
+    semantic_search_topic --> check_empty_results
+    check_empty_results -->|No| semantic_fallback
+    check_empty_results -->|Yes| synthesize_answer
+    semantic_fallback --> synthesize_answer
+    synthesize_answer --> check_second_pass
+    check_second_pass -->|Yes| recursive_semantic
+    check_second_pass -->|No| return_template_result
+    recursive_semantic --> return_template_result
+    return_template_result --> END
+    semantic_search_uofa --> check_semantic_hits
+    check_semantic_hits -->|No| return_no_results
+    check_semantic_hits -->|Yes| generate_author_cypher
+    return_no_results --> END
+    generate_author_cypher --> run_author_cypher
+    run_author_cypher --> synthesize_final_author
+    synthesize_final_author --> return_semantic_result
+    return_semantic_result --> END
+
+    classDef decision fill:#FF9800,stroke:#E65100,stroke-width:2px,color:#000
+    classDef process fill:#2196F3,stroke:#0D47A1,stroke-width:2px,color:#fff
+    classDef database fill:#9C27B0,stroke:#4A148C,stroke-width:2px,color:#fff
+    classDef entry fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    classDef output fill:#F44336,stroke:#B71C1C,stroke-width:2px,color:#fff

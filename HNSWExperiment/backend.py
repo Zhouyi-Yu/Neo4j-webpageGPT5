@@ -154,21 +154,35 @@ driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 # LLM HELPER
 # ───────────────────────────────────────────────────────────────
 
-def call_llm(system_prompt: str, user_content: str) -> str:
+def call_llm(system_prompt: str, user_content: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
     """
-    Single-turn LLM call using the Responses API.
+    LLM call using the Responses API with optional conversation history.
+
+    Args:
+        system_prompt: System instructions
+        user_content: Current user message
+        conversation_history: Optional list of previous exchanges, each dict with 'role' and 'content'
 
     We ignore 'reasoning' items and extract text from the first 'message' item:
       - item.type == "message"
       - item.content[*].type == "output_text"
       - part.text can be either a plain string or an object with .value
     """
+    # Build input messages: system + history + current user message
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add conversation history if provided (limit to last 5 exchanges to prevent context overflow)
+    if conversation_history:
+        # Take last 10 messages (5 Q&A pairs)
+        recent_history = conversation_history[-10:]
+        messages.extend(recent_history)
+    
+    # Add current user message
+    messages.append({"role": "user", "content": user_content})
+    
     resp = client.responses.create(
         model=OPENAI_MODEL_CHAT,
-        input=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
+        input=messages,
     )
 
     for item in resp.output:
@@ -417,6 +431,9 @@ def semantic_search_uofa(question_text: str, k: int = 20) -> List[Dict[str, Any]
     RETURN node.title            AS title,
            node.publication_year AS publication_year,
            coalesce(node.cited_by_count, 0) AS cited_by_count,
+           node.abstract         AS abstract,
+           node.openalex_url     AS openalex_url,
+           node.doi              AS doi,
            score
     ORDER BY score DESC
     LIMIT $k
@@ -469,6 +486,7 @@ def synthesize_answer(
     cypher: str,
     db_rows: List[Dict[str, Any]],
     semantic_hits: List[Dict[str, Any]],
+    conversation_history: Optional[List[Dict[str, str]]] = None,
 ) -> str:
     payload = {
         "question": question,
@@ -478,7 +496,7 @@ def synthesize_answer(
         "semantic_hits": _sanitize_payload(semantic_hits),
     }
     user_content = json.dumps(payload, ensure_ascii=False)
-    answer = call_llm(ANSWER_SYSTEM_PROMPT, user_content)
+    answer = call_llm(ANSWER_SYSTEM_PROMPT, user_content, conversation_history)
     return answer.strip()
 
 
@@ -486,6 +504,7 @@ def synthesize_final_author_answer(
     question: str,
     semantic_hits: List[Dict[str, Any]],
     author_rows: List[Dict[str, Any]],
+    conversation_history: Optional[List[Dict[str, str]]] = None,
 ) -> str:
     payload = {
         "question": question,
@@ -493,7 +512,7 @@ def synthesize_final_author_answer(
         "author_data": _sanitize_payload(author_rows),
     }
     user_content = json.dumps(payload, ensure_ascii=False)
-    return call_llm(FINAL_AUTHOR_ANSWER_PROMPT, user_content).strip()
+    return call_llm(FINAL_AUTHOR_ANSWER_PROMPT, user_content, conversation_history).strip()
 
 
 # ───────────────────────────────────────────────────────────────
@@ -547,7 +566,7 @@ def has_required_slots(intent_obj: Dict[str, Any]) -> bool:
             return False
     return True
 
-def answer_question(question: str) -> Dict[str, Any]:
+def answer_question(question: str, conversation_history: Optional[List[Dict[str, str]]] = None, selected_user_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Full pipeline:
       1) classify intent
@@ -557,10 +576,23 @@ def answer_question(question: str) -> Dict[str, Any]:
       5) run semantic search if needed
       6) synthesize final answer
 
+    Args:
+        question: The user's question
+        conversation_history: Optional list of previous exchanges (each dict with 'role' and 'content')
+        selected_user_id: Optional userId from candidate selection (bypasses author resolution)
+
     Returns a dict suitable for jsonify in Flask.
     """
     intent_obj = classify_intent(question)
     intent_obj = normalize_intent(intent_obj)
+
+    # ~~~ STEP 0: HANDLE DIRECT USER SELECTION ~~~
+    # If selected_user_id is provided, skip author resolution entirely
+    if selected_user_id:
+        intent_obj["authorUserId"] = selected_user_id
+        # Promote to author query if it was generic
+        if intent_obj.get("intent") == "OPEN_QUESTION":
+            intent_obj["intent"] = "AUTHOR_MAIN_RESEARCH_AREAS"
 
     # ~~~ STEP 1: AUTHOR RESOLUTION & INTENT PROMOTION ~~~
     # We try to resolve the author strictly before deciding on the flow.
@@ -635,6 +667,7 @@ def answer_question(question: str) -> Dict[str, Any]:
             cypher=cypher,
             db_rows=db_rows,
             semantic_hits=semantic_hits,
+            conversation_history=conversation_history,
         )
         
         # Second-pass if needed
@@ -676,7 +709,7 @@ def answer_question(question: str) -> Dict[str, Any]:
             author_rows = []
 
         # 4. Synthesize Final Answer
-        final_answer = synthesize_final_author_answer(question, semantic_hits, author_rows)
+        final_answer = synthesize_final_author_answer(question, semantic_hits, author_rows, conversation_history)
 
         return {
             "answer": final_answer,
