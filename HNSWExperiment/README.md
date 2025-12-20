@@ -1,27 +1,21 @@
 # Neo4j Research Q&A System
 
-A powerful, LLM-driven question-answering system for University of Alberta research publications, powered by Neo4j graph database and OpenAI.
+A high-performance, LLM-driven research discovery engine for the University of Alberta, powered by **FastAPI**, **Neo4j**, and **OpenAI**.
 
-## 🚀 Recent Update: FastAPI Migration
+## 🚀 System Architecture
 
-The project has recently been migrated from Flask to **FastAPI** to enable:
-- **Asynchronous I/O**: High-performance handling of concurrent LLM and Neo4j requests.
-- **Improved Performance**: Reduced latency for I/O-bound operations.
-- **Strict Logic Parity**: The backend logic (`backend.py`) remains **100% functionally identical** to the original implementation (found in `olderVer/`). Every branching decision, LLM prompt, and processing step has been preserved.
+This system is built with **FastAPI** to provide a high-concurrency, asynchronous backend capable of orchestrating complex LLM and Graph Database operations in real-time.
 
-## 🛠️ Tech Stack
-
-- **Backend**: FastAPI (Python 3.10+)
-- **Database**: Neo4j (Graph Database with Vector Index)
-- **AI**: OpenAI (gpt-4o-mini for chat, text-embedding-3-large for vectors)
-- **Validation**: Pydantic
-- **Frontend**: HTML5/JavaScript (Vanilla)
+### Key Features
+- **Asynchronous Pipeline**: Full non-blocking I/O for OpenAI and Neo4j.
+- **Strict Logic Parity**: Precise replication of the original scientific discovery logic.
+- **Speculative Synthesis**: Parallel intent classification and semantic discovery.
+- **Robust Validation**: Pydantic-powered request and response schemas.
 
 ## 📁 Project Structure
 
 - `main.py`: The FastAPI application entry point.
-- `backend.py`: Core asynchronous pipeline logic (parity version).
-- `olderVer/`: Contains the original Flask-based `app.py` and `backend.py` for reference.
+- `backend.py`: Core asynchronous pipeline logic.
 - `index.html`: The main chat interface.
 - `prompts/`: System prompts for intent classification, Cypher generation, and synthesis.
 - `.env`: Environment variables (API keys and database credentials).
