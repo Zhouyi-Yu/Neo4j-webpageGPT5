@@ -1,16 +1,13 @@
-from __future__ import annotations
-from pathlib import Path
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from openai import AsyncOpenAI
+from neo4j import AsyncGraphDatabase
+import logging, sys, asyncio, os, re, json
 from datetime import datetime
-from openai import OpenAI
-import os
-import re
-import json
 from typing import List
-import json, re as _re
 from collections import Counter
-from flask import Flask, request, jsonify, send_from_directory
-from neo4j import GraphDatabase
-import logging, sys
 
 # ─── Logging Setup ─────────────────────────────────────────────
 logger = logging.getLogger()
@@ -44,10 +41,10 @@ NEO4J_PASSWORD = "password"
 MODEL_NAME = "gpt-4"
 
 # Initialize clients
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", "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"))
-driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY", "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"))
+driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
-_TOKEN_RE = _re.compile(r"^[a-zA-Z][a-zA-Z\-']{1,}$")
+_TOKEN_RE = re.compile(r"^[a-zA-Z][a-zA-Z\-']{1,}$")
 # ─── System Prompts ──────────────────────────────────────────────────────────────
 # Prompt 1: Instructs AI to convert user questions into Cypher queries only
 SYSTEM_PROMPT_1 = (
@@ -269,10 +266,24 @@ Output Format:
 
 # Prompt for summarizing publication titles into research topics
 TITLE_ANALYSIS_PROMPT = """
-Analyze publication titles to extract main research topics. 
+Analyze publication titles to extract main research topics.
 Return only a 1-2 phrase summary of the primary research focus.
 Example: "smart grids and machine learning applications in power systems"
 """
+
+# ─── FastAPI App ──────────────────────────────────────────────────────────────────
+app = FastAPI()
+
+# ─── Pydantic Models ─────────────────────────────────────────────────────────────
+class SearchRequest(BaseModel):
+    q: str
+
+class SummaryRequest(BaseModel):
+    name: str = None
+    normalized_name: str = None
+
+class QueryRequest(BaseModel):
+    history: List[dict]
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────────
 
@@ -293,7 +304,7 @@ def _last_user_question_text(history):
                 return c
     return ""
 
-def _find_name_candidates(driver, free_text: str, limit: int = 200):
+async def _find_name_candidates(driver, free_text: str, limit: int = 200):
     """
     Use tokens from the free text to do CONTAINS lookups against normalized_name/name.
     Returns [{'name': ..., 'normalized_name': ...}, ...]
@@ -314,8 +325,9 @@ def _find_name_candidates(driver, free_text: str, limit: int = 200):
     ORDER BY score DESC, name
     LIMIT $limit
     """
-    with driver.session() as session:
-        rows = session.run(q, tokens=tokens, limit=limit).data()
+    async with driver.session() as session:
+        results = await session.run(q, tokens=tokens, limit=limit)
+        rows = await results.data()
     # de-dup by normalized_name keeping best score
     seen = {}
     for row in rows:
@@ -331,7 +343,7 @@ def strip_code_fences(text: str) -> str:
         return "\n".join(s.splitlines()[1:-1])
     return text
 
-def natural_language_to_cypher(history: list[dict]) -> str:
+async def natural_language_to_cypher(history: list[dict]) -> str:
     """Convert conversation history into a Cypher query via OpenAI chat completion."""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT_1},
@@ -361,7 +373,7 @@ def natural_language_to_cypher(history: list[dict]) -> str:
 
     # ========= LLM CALL =========
     try:
-        resp = client.chat.completions.create(
+        resp = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages,
             max_tokens=512,
@@ -389,15 +401,15 @@ def natural_language_to_cypher(history: list[dict]) -> str:
 
     return cleaned
 
-def execute_cypher(query: str):
+async def execute_cypher(query: str):
     """Run a Cypher query against Neo4j and return a list of result rows."""
     print(f"\n[NEO4J] Executing:\n{query[:500]}{'...' if len(query) > 500 else ''}")
-    
+
     try:
-        with driver.session() as session:
-            result = session.run(query)
+        async with driver.session() as session:
+            result = await session.run(query)
             output = []
-            for record in result:
+            async for record in result:
                 row = {}
                 for k, v in record.items():
                     # Convert complex types to standard Python types
@@ -409,7 +421,7 @@ def execute_cypher(query: str):
                     else:
                         row[k] = v
                 output.append(row)
-            
+
             print(f"[NEO4J] Returned {len(output)} records")
             if output:
                 print(f"Sample record: {output[0]}")
@@ -422,7 +434,7 @@ def extract_dept_and_years(query):
     """Parse department trend queries to extract department name and year range."""
     dept_match = re.search(r"trim\('([^']+)'\)", query)
     year_match = re.search(r"(\d{4})\s+AS\s+startYear[,\s]+(\d{4})", query)
-    
+
     dept_name = dept_match.group(1) if dept_match else "the department"
     start_year = year_match.group(1) if year_match else "start year"
     end_year = year_match.group(2) if year_match else "end year"
@@ -510,125 +522,124 @@ def patch_dept_where_clause(q: str) -> str:
         print("[PATCH] Added abbr fallback to department WHERE clause")
     return new_q
 
-# ─── Flask App ───────────────────────────────────────────────────────────────────
-app = Flask(__name__)
 
-@app.route("/", methods=["GET"])
-def serve_index():
-    """Serve the logo image file used in the web interface header."""
-    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "index.html")
+@app.get("/")
+async def serve_index():
+    """Serve the index.html file."""
+    return FileResponse(os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html"))
 
-@app.route("/el1.jpg", methods=["GET"])
-def serve_logo():
-    return send_from_directory(os.path.dirname(os.path.abspath(__file__)), "el1.jpg")
-# --- Fast partial-name lookup --------------------------------
-@app.route("/search_researchers", methods=["POST"])
-def search_researchers():
+@app.get("/el1.jpg")
+async def serve_logo():
+    """Serve the logo image."""
+    return FileResponse(os.path.join(os.path.dirname(os.path.abspath(__file__)), "el1.jpg"))
+
+@app.post("/search_researchers")
+async def search_researchers(req: SearchRequest):
     """
-    Return up to 25 researchers whose name contains the user's text (case-insensitive),
-    matching against normalized_name and raw name. Results are {name, normalized_name}.
+    Return researchers matching the query text.
     """
-    data = request.get_json() or {}
-    q = _normalize(data.get("q", ""))
+    q = _normalize(req.q)
     if not q or len(q) < 2:
-        return jsonify({"matches": []})
+        return {"matches": []}
 
-    with driver.session() as session:
-        rows = session.run("""
+    async with driver.session() as session:
+        result = await session.run("""
             MATCH (r:Researcher)
             WHERE r.normalized_name CONTAINS $q
                OR toLower(coalesce(r.name, '')) CONTAINS $q
             RETURN r.name AS name, r.normalized_name AS normalized_name
             ORDER BY name
-        LIMIT 200;
-        """, q=q).data()
+            LIMIT 200;
+        """, q=q)
+        rows = await result.data()
 
-    return jsonify({"matches": rows})
+    return {"matches": rows}
 
-# --- Researcher “profile” summary -----------------------------
-@app.route("/researcher_summary", methods=["POST"])
-def researcher_summary():
+@app.post("/researcher_summary")
+async def researcher_summary(req: SummaryRequest):
     """
-    Given a (full or partial) name, resolve to normalized_name and return a quick profile:
-    - publication count + first/latest year
-    - top co-authors (by shared pubs)
-    - keywords and tags (from Annual Reports)
-    - latest 20 publications (year/title/doi)
+    Resolve to normalized_name and return a quick profile.
     """
-    data = request.get_json() or {}
-    supplied_name = data.get("name") or data.get("normalized_name") or ""
+    supplied_name = req.name or req.normalized_name or ""
     norm = _normalize(supplied_name)
     if not norm:
-        return jsonify({"error": "Missing 'name'"}), 400
+        raise HTTPException(status_code=400, detail="Missing 'name'")
 
-    with driver.session() as session:
+    async with driver.session() as session:
         # Resolve to an exact researcher by normalized_name
-        rec = session.run("""
+        rec_res = await session.run("""
             MATCH (r:Researcher)
             WHERE r.normalized_name = $norm
                OR toLower(coalesce(r.name,'')) = $norm
             RETURN r.name AS name, r.normalized_name AS normalized_name
             LIMIT 1
-        """, norm=norm).single()
+        """, norm=norm)
+        rec = await rec_res.single()
 
         if not rec:
             # If not an exact match, try a contains match and take the first
-            rec = session.run("""
+            rec_res = await session.run("""
                 MATCH (r:Researcher)
                 WHERE r.normalized_name CONTAINS $norm
                    OR toLower(coalesce(r.name,'')) CONTAINS $norm
                 RETURN r.name AS name, r.normalized_name AS normalized_name
                 ORDER BY r.name
                 LIMIT 1
-            """, norm=norm).single()
+            """, norm=norm)
+            rec = await rec_res.single()
 
         if not rec:
-            return jsonify({"error": "Researcher not found"}), 404
+            raise HTTPException(status_code=404, detail="Researcher not found")
 
         full_name = rec["name"]
         resolved_norm = rec["normalized_name"]
 
-        stats = session.run("""
+        stats_res = await session.run("""
             MATCH (r:Researcher {normalized_name:$n})-[:PUBLISHED]->(p:Publication)
             RETURN COUNT(DISTINCT p) AS publications,
                    [y IN collect(DISTINCT p.publication_year) WHERE y IS NOT NULL] AS years
-        """, n=resolved_norm).single()
+        """, n=resolved_norm)
+        stats = await stats_res.single()
 
         pubs_total = stats["publications"] if stats else 0
         years = stats["years"] if stats else []
         first_year = min(years) if years else None
         latest_year = max(years) if years else None
 
-        pubs_list = session.run("""
+        pubs_res = await session.run("""
             MATCH (r:Researcher {normalized_name:$n})-[:PUBLISHED]->(p:Publication)
             RETURN p.title AS Title, p.publication_year AS Year, p.doi AS DOI
             ORDER BY Year DESC, Title
             LIMIT 20
-        """, n=resolved_norm).data()
+        """, n=resolved_norm)
+        pubs_list = await pubs_res.data()
 
-        coauthors = session.run("""
+        coauthors_res = await session.run("""
             MATCH (r:Researcher {normalized_name:$n})-[:PUBLISHED]->(p:Publication)<-[:PUBLISHED]-(co:Researcher)
             WHERE co <> r
             RETURN co.name AS CoAuthor, COUNT(DISTINCT p) AS CollaborationCount
             ORDER BY CollaborationCount DESC, CoAuthor
             LIMIT 10
-        """, n=resolved_norm).data()
+        """, n=resolved_norm)
+        coauthors = await coauthors_res.data()
 
-        keywords = session.run("""
+        keywords_res = await session.run("""
             MATCH (r:Researcher {normalized_name:$n})-[:WORKS_ON]->(k:Keyword)
             RETURN k.name AS Keyword
             ORDER BY Keyword
             LIMIT 20
-        """, n=resolved_norm).data()
+        """, n=resolved_norm)
+        keywords = await keywords_res.data()
 
-        tags = session.run("""
+        tags_res = await session.run("""
             MATCH (r:Researcher {normalized_name:$n})-[:STUDIES]->(t:Tag)
             RETURN t.name AS Tag
             ORDER BY Tag
             LIMIT 20
-        """, n=resolved_norm).data()
+        """, n=resolved_norm)
+        tags = await tags_res.data()
 
-    return jsonify({
+    return {
         "response_type": "researcher_summary",
         "researcher": full_name,
         "stats": {
@@ -640,21 +651,11 @@ def researcher_summary():
         "keywords": keywords,
         "tags": tags,
         "publications": pubs_list
-    })
-@app.route("/query", methods=["POST"])
-def handle_query():
+    }
+@app.post("/query")
+async def handle_query(req: QueryRequest):
     """
     Central request handler for all user queries.
-    Routes requests to:
-      0. Emerging research trends analysis
-      1. Main research areas analysis
-      2. Important topics (shallow vs deep)
-      3. Shallow tag/keyword analysis
-      4. Deep title analysis
-      5. Generic Cypher generation
-      6. Department trend summaries
-      7. Co-author publication reports
-    Returns JSON with result type, analysis, and data.
     """
     print("\n" + "=" * 80)
     print("INCOMING REQUEST")
@@ -669,7 +670,7 @@ def handle_query():
         "list", "tell", "give", "find", "about", "concerning", "regarding"
     }
 
-    def _normalize(s: str) -> str:
+    def _normalize_local(s: str) -> str:
         return _re.sub(r"\s+", " ", (s or "").strip()).lower()
 
     def _last_real_user_msg(history_list):
@@ -688,31 +689,25 @@ def handle_query():
 
     def _extract_capitalized_name_tokens(text: str) -> list[str]:
         """
-        Pull likely name tokens from the *original* user wording:
-        - Capitalized words of length >= 3 (e.g., 'Petr', 'Musilek', 'Edward-Smith')
-        - We keep hyphens/apostrophes inside tokens
+        Pull likely name tokens from the original user wording.
         """
         if not text:
             return []
         toks = _re.findall(r"\b[A-Z][a-zA-Z\-']{2,}\b", text)
-        # Normalize to lower for CONTAINS matches; de-dup while keeping order
         seen, out = set(), []
         for t in toks:
             tl = t.lower()
-            # ADD THE STOP WORD CHECK HERE
             if tl not in seen and tl not in STOP_WORDS:
                 seen.add(tl)
                 out.append(tl)
         return out
 
-    def _lookup_name_candidates(tokens: list[str], limit: int = 200) -> list[dict]:
+    async def _lookup_name_candidates_local(tokens: list[str], limit: int = 200) -> list[dict]:
         """
         Use CONTAINS against normalized_name/name for any of the tokens.
-        Uses execute_cypher (string formatting) to avoid reliance on parameters.
         """
         if not tokens:
             return []
-        # Basic escaping for single quotes (rare in names, but safe)
         toks = [t.replace("'", "\\'") for t in tokens]
         where_or = " OR ".join(
             [f"r.normalized_name CONTAINS '{t}' OR toLower(coalesce(r.name,'')) CONTAINS '{t}'" for t in toks]
@@ -724,87 +719,61 @@ def handle_query():
         ORDER BY name
         LIMIT {limit}
         """
-        rows = execute_cypher(cy) or []
+        rows = await execute_cypher(cy) or []
         return [ {"name": r.get("name",""), "normalized_name": r.get("normalized_name","")} for r in rows if r ]
 
     try:
-        payload = request.get_json() or {}
-        print(f"Payload: {json.dumps(payload, indent=2)}")
-
-        history = payload.get("history", [])
-        if not history or not isinstance(history, list):
-            return jsonify({"error": "Invalid history format"}), 400
+        history = req.history
+        print(f"Payload history length: {len(history)}")
 
         user_message = history[-1].get("content", "")
         print(f"\nProcessing query: '{user_message}'")
 
         # ------------------------------------------------------------------
-        # Control-word detection (for follow-up clicks)
+        # Control-word detection
         shallow_requested = any(m.get("content","").lower() == "shallow" for m in history)
         deep_requested    = any(m.get("content","").lower() == "deep"    for m in history)
 
-        # NEW: Check if user already *selected* a researcher after disambiguation
         selected_norm = None
         for m in reversed(history):
             c = (m.get("content") or "").strip().lower()
             if c.startswith("select_researcher:"):
-                selected_norm = _normalize(c.split(":", 1)[1])
+                selected_norm = _normalize_local(c.split(":", 1)[1])
                 break
         
-        # After the `selected_norm` scan, before the disambiguation pass:
-
-        # Look at the last real user question
         orig_question = _last_real_user_msg(history)
         name_tokens   = _extract_capitalized_name_tokens(orig_question)
 
-        # If the user mentioned a different person than the pinned selection,
-        # clear the pin so we re-run disambiguation for the new name.
         if selected_norm and name_tokens:
-            candidates = _lookup_name_candidates(name_tokens)
-            # If we found candidates and none of them is the pinned researcher, unpin
+            candidates = await _lookup_name_candidates_local(name_tokens)
             if candidates and all(c.get("normalized_name") != selected_norm for c in candidates):
                 selected_norm = None
 
-        # ------------------------------------------------------------------
-        # 🔎 NEW: Always run a partial-name disambiguation pass FIRST,
-        #         unless a selection has already been made.
         if not selected_norm:
             orig_question = _last_real_user_msg(history)
             name_tokens   = _extract_capitalized_name_tokens(orig_question)
+            candidates = await _lookup_name_candidates_local(name_tokens) if name_tokens else []
 
-            print(f"Name tokens detected: {name_tokens}")
-            candidates = _lookup_name_candidates(name_tokens)
-            name_tokens = _extract_capitalized_name_tokens(orig_question)
-            print(f"Name tokens detected: {name_tokens}")
-            candidates = _lookup_name_candidates(name_tokens) if name_tokens else []
-
-            # Fallback so lowercase names still trigger suggestions
             if not candidates:
-                candidates = _find_name_candidates(driver, orig_question, limit=50)
+                # Fallback to general fuzzy (using tokens but not just capitalized)
+                candidates = await _find_name_candidates(driver, orig_question, limit=50)
 
             if candidates:
-                print(f"Disambiguation candidates: {[c['name'] for c in candidates]}")
-                # Always ask the user to pick, even if only one match
-                return jsonify({
+                return {
                     "response_type": "researcher_disambiguation",
                     "message": "I found the following people. Who did you mean?",
                     "candidates": candidates
-                })
+                }
 
-        # From this point on, if selected_norm is set, use it to override any name.
-        # We'll also use the last non-control question text for detectors,
-        # so 'select_researcher:...' control messages don't confuse routing.
         last_real_msg = _last_real_user_msg(history)
 
-        # ------------------------------------------------------------------
-        # 0. Emerging research-trends query  (auto deep analysis)
+        # 0. Emerging research-trends query
         trend_q = detect_research_trends_query(last_real_msg)
         if trend_q:
             name, start_year, end_year = trend_q
             if selected_norm:
-                name = selected_norm  # force exact match via normalized_name
-            norm_name = _normalize(name)
-
+                name = selected_norm
+            
             cypher_query = f"""
             WITH '{name}' AS inputName,
                  {start_year} AS startYear,
@@ -816,40 +785,38 @@ def handle_query():
               AND p.publication_year <= endYear
             RETURN p.title AS Title, p.publication_year AS Year;
             """
-            rows = execute_cypher(cypher_query)
+            rows = await execute_cypher(cypher_query)
             titles = [row["Title"] for row in rows if row.get("Title")]
 
             if not titles:
-                return jsonify({
+                return {
                     "response_type": "trend_analysis",
                     "analysis": "No publications found in that period."
-                })
+                }
 
             prompt = (
                 f"{TITLE_ANALYSIS_PROMPT}\n\n"
                 f"(Focus on NEW / rising topics between {start_year} and {end_year})\n"
                 + "\n".join(titles[:50])
             )
-            summary = client.chat.completions.create(
+            chat_resp = await client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[{"role": "system", "content": prompt}],
                 max_tokens=128,
                 temperature=0
-            ).choices[0].message.content.strip()
+            )
+            summary = chat_resp.choices[0].message.content.strip()
 
-            return jsonify({
+            return {
                 "response_type": "trend_analysis",
                 "analysis": summary,
                 "results": [{"Title": t} for t in titles]
-            })
+            }
 
-        # ------------------------------------------------------------------
-        # 1. “Main research areas …” query  (auto deep analysis)
+        # 1. “Main research areas …” query
         areas_name = detect_research_areas_query(last_real_msg)
         if areas_name:
             name = selected_norm or areas_name
-            norm_name = _normalize(name or "")
-
             cypher_query = f"""
             WITH '{name}' AS inputName
             WITH toLower(inputName) AS normName
@@ -857,58 +824,43 @@ def handle_query():
                   -[:PUBLISHED]->(p:Publication)
             RETURN p.title AS Title;
             """
-            rows   = execute_cypher(cypher_query)
+            rows   = await execute_cypher(cypher_query)
             titles = [row["Title"] for row in rows if row.get("Title")]
 
             if not titles:
-                return jsonify({
+                return {
                     "response_type": "topic_analysis",
                     "analysis": "No publications found."
-                })
+                }
 
             prompt  = TITLE_ANALYSIS_PROMPT + "\n\n" + "\n".join(titles[:50])
-            summary = client.chat.completions.create(
+            chat_resp = await client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[{"role": "system", "content": prompt}],
                 max_tokens=128,
                 temperature=0
-            ).choices[0].message.content.strip()
+            )
+            summary = chat_resp.choices[0].message.content.strip()
 
-            return jsonify({
+            return {
                 "response_type": "topic_analysis",
                 "analysis": summary,
                 "results": [{"Title": t} for t in titles]
-            })
+            }
 
-        # ------------------------------------------------------------------
-        # 2. Important-topics question → offer shallow / deep choice
+        # 2. Important-topics question
         name_in_query = detect_topics_query(last_real_msg)
         if name_in_query and not selected_norm:
-            return jsonify({
+            return {
                 "response_type": "choice_request",
                 "message": (
                     "Would you like a shallow search (tags/keywords) "
                     f"or a deep search (all publication titles) for {name_in_query}?"
                 )
-            })
+            }
 
         collab_intent = bool(re.search(r"\b(co-?author|coauthor|collaborat)\w*\b", last_real_msg, re.I))
 
-        if selected_norm and collab_intent:
-            name = selected_norm
-            cypher_query =f"""
-                WITH '{name}' AS inputName
-		        WITH toLower(inputName) AS normName
-                MATCH (r:Researcher {{normalized_name: normName}})-[:PUBLISHED]->(p:Publication)<-[:PUBLISHED]-(co:Researcher)
-                WHERE co <> r
-                RETURN co.name AS CoAuthor, COUNT(DISTINCT p) AS CollaborationCount
-                ORDER BY CollaborationCount DESC, CoAuthor
-                LIMIT 10
-                """
-
-        # If you have a session: session.run(cypher_query)
-            rows = execute_cypher(cypher_query)
-    # ------------------------------------------------------------------
         # 3a. Shallow analysis branch
         if shallow_requested or (selected_norm and name_in_query and not deep_requested):
             name = selected_norm or next(
@@ -916,8 +868,7 @@ def handle_query():
                  for m in reversed(history) if detect_topics_query(m["content"])),
                 None
             ) or "unknown"
-            norm_name = _normalize(name)
-
+            
             cypher_query = f"""
             WITH '{name}' AS inputName
             WITH toLower(inputName) AS normName
@@ -926,34 +877,32 @@ def handle_query():
             OPTIONAL MATCH (r)-[:WORKS_ON]->(keyword:Keyword)
             RETURN tag.name AS Tag, keyword.name AS Keyword;
             """
-            rows     = execute_cypher(cypher_query)
+            rows     = await execute_cypher(cypher_query)
             tags     = [r["Tag"]     for r in rows if r.get("Tag")]
             keywords = [r["Keyword"] for r in rows if r.get("Keyword")]
 
             if not tags and not keywords:
-                return jsonify({
+                return {
                     "response_type": "fallback_deep",
                     "message": "No tags or keywords found—switching to deep search..."
-                })
+                }
 
             top_topic = Counter(tags + keywords).most_common(1)[0][0]
-            return jsonify({
+            return {
                 "response_type": "topic_analysis",
                 "analysis": f"Based on tags and keywords, {top_topic} is the primary focus.",
                 "results": ([{"Tag": t} for t in tags]
                             + [{"Keyword": k} for k in keywords])
-            })
+            }
 
-        # ------------------------------------------------------------------
-        # 3b. Deep analysis branch (explicit or fallback)
+        # 3b. Deep analysis branch
         if deep_requested or (selected_norm and name_in_query and not shallow_requested):
             name = selected_norm or next(
                 (detect_topics_query(m["content"])
                  for m in reversed(history) if detect_topics_query(m["content"])),
                 None
             ) or "unknown"
-            norm_name = _normalize(name)
-
+            
             cypher_query = f"""
             WITH '{name}' AS inputName
             WITH toLower(inputName) AS normName
@@ -961,32 +910,31 @@ def handle_query():
                   -[:PUBLISHED]->(p:Publication)
             RETURN p.title AS Title;
             """
-            rows   = execute_cypher(cypher_query)
+            rows   = await execute_cypher(cypher_query)
             titles = [r["Title"] for r in rows if r.get("Title")]
 
             if not titles:
-                return jsonify({
+                return {
                     "response_type": "topic_analysis",
                     "analysis": "No publications found."
-                })
+                }
 
             prompt  = TITLE_ANALYSIS_PROMPT + "\n\n" + "\n".join(titles[:50])
-            summary = client.chat.completions.create(
+            chat_resp = await client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[{"role": "system", "content": prompt}],
                 max_tokens=128,
                 temperature=0
-            ).choices[0].message.content.strip()
+            )
+            summary = chat_resp.choices[0].message.content.strip()
 
-            return jsonify({
+            return {
                 "response_type": "topic_analysis",
                 "analysis": summary,
                 "results": [{"Title": t} for t in titles]
-            })
+            }
 
-        # ------------------------------------------------------------------
         # 4. Generic natural-language → Cypher
-        # If a researcher has been selected, hint the LLM to pin normalized_name.
         llm_history = history
         if selected_norm:
             llm_history = history + [{
@@ -995,21 +943,17 @@ def handle_query():
                            f"When matching (Researcher), use this normalized_name."
             }]
 
-        cypher_query = natural_language_to_cypher(llm_history)
-        # cypher_query = cypher_query.replace('{name:', '{normalized_name:')\
-        #                            .replace('Researcher {name', 'Researcher {normalized_name')
+        cypher_query = await natural_language_to_cypher(llm_history)
         cypher_query = patch_dept_where_clause(cypher_query)
         print(f"\nFinal Cypher:\n{cypher_query}")
-        results = execute_cypher(cypher_query)
+        results = await execute_cypher(cypher_query)
         print(f"Rows returned: {len(results)}")
 
-        # ------------------------------------------------------------------
         # 5. Department-level trend results
         if "ORDER BY increase DESC" in cypher_query:
             dept_name, start_year, end_year = extract_dept_and_years(cypher_query)
             if not results:
-                return jsonify({"response_type": "trend_analysis",
-                                "analysis": "No trend data found"})
+                return {"response_type": "trend_analysis", "analysis": "No trend data found"}
 
             summary = f"For {dept_name} ({start_year}-{end_year}), top trends:\n"
             summary += "\n".join([
@@ -1017,13 +961,12 @@ def handle_query():
                 f"(+{row['increase']})"
                 for i, row in enumerate(results[:5])
             ])
-            return jsonify({
+            return {
                 "response_type": "trend_analysis",
                 "analysis": summary,
                 "results": results
-            })
+            }
 
-        # ------------------------------------------------------------------
         # 6. Co-author publication queries
         if "collect(co.name)" in cypher_query.lower():
             formatted = [{
@@ -1033,26 +976,23 @@ def handle_query():
                 "coauthors": ", ".join(row.get("CoAuthors", [])) or "None"
             } for row in results]
 
-            return jsonify({
+            return {
                 "response_type": "publications_with_coauthors",
                 "cypher_query": cypher_query,
                 "formatted_results": formatted,
                 "raw_results": results
-            })
+            }
 
-        # ------------------------------------------------------------------
-        # 7. Default: just return query & rows
-        return jsonify({
+        # 7. Default
+        return {
             "cypher_query": cypher_query,
             "results": results
-        })
+        }
 
-    # ————————————————————————————————————————————————————————————————
     except Exception as e:
         print(f"\nERROR: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True)
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=5000)

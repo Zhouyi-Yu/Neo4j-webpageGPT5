@@ -16752,3 +16752,5 @@ ERROR: {code: Neo.ClientError.Statement.SyntaxError} {message: Variable `topic` 
 "WHERE toLower(t.name) CONTAINS topic"
                                 ^}
 2025-10-05 15:47:29,851 [INFO] 127.0.0.1 - - [05/Oct/2025 15:47:29] "[35m[1mPOST /query HTTP/1.1[0m" 500 -
+2025-12-19 23:11:44,295 [INFO] EXCEPTION: Couldn't connect to 129.128.218.235:7687 (resolved to ('129.128.218.235:7687',)):
+Timed out trying to establish connection to ResolvedIPv4Address(('129.128.218.235', 7687))

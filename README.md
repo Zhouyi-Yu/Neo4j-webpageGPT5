@@ -1,49 +1,57 @@
-# Neo4j-webpageGPT5
+# Neo4j Research Q&A System
 
-Flask service that turns natural-language research questions into Cypher with OpenAI, runs them against a Neo4j graph built from institutional CSVs + OpenAlex exports, and serves a minimal web UI (`index.html`).
+A high-performance, LLM-driven research discovery engine for the University of Alberta, powered by **FastAPI**, **Neo4j**, and **OpenAI**.
 
-## What’s here
-- LLM-assisted Cypher generation and execution (`app.py`).
-- Researcher lookup (`/search_researchers`) and quick profile summaries (`/researcher_summary`).
-- Graph rebuild helper that ingests CSVs into Neo4j (`superDBmaker.py`).
-- Local data workspace (`infocsv/`) ignored from git to keep large CSVs out of the repo.
+## 🚀 System Architecture
 
-## Quick start
-1) Python 3.10+ and a reachable Neo4j instance.
-2) Create a venv and install deps:
-```
-python -m venv .venv
-source .venv/bin/activate
-pip install flask neo4j openai
-```
-3) Configure secrets:
-- Set `OPENAI_API_KEY`.
-- Update `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` in `app.py` (defaults point to a demo instance).
-4) Run the API/UI:
-```
-python app.py
-# visit http://localhost:5000/
+This system is built with **FastAPI** to provide a high-concurrency, asynchronous backend capable of orchestrating complex LLM and Graph Database operations in real-time.
+
+### Key Features
+- **Asynchronous Pipeline**: Full non-blocking I/O for OpenAI and Neo4j.
+- **Strict Logic Parity**: Precise replication of the original scientific discovery logic.
+- **Speculative Synthesis**: Parallel intent classification and semantic discovery.
+- **Robust Validation**: Pydantic-powered request and response schemas.
+
+## 📁 Project Structure
+
+- `main.py`: The FastAPI application entry point.
+- `backend.py`: Core asynchronous pipeline logic.
+- `index.html`: The main chat interface.
+- `prompts/`: System prompts for intent classification, Cypher generation, and synthesis.
+- `.env`: Environment variables (API keys and database credentials).
+
+## 🚦 Getting Started
+
+### 1. Prerequisites
+Ensure you have Python 3.10+ and a running Neo4j instance.
+
+### 2. Installation
+```bash
+pip install -r requirements.txt
 ```
 
-## API highlights
-- `POST /search_researchers` with `{"q": "musilek"}` → up to 25 matches.
-- `POST /researcher_summary` with `{"name": "Petr Musilek"}` → pubs, co-authors, tags/keywords.
-- `POST /query` drives the LLM workflow; send a chat-style `history`, e.g.:
+### 3. Configuration
+Create/Update your `.env` file:
+```env
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your_password
+OPENAI_API_KEY=your_openai_api_key
 ```
-curl -X POST http://localhost:5000/query \
-  -H "Content-Type: application/json" \
-  -d '{"history":[{"role":"user","content":"What did Petr Musilek publish in 2020?"}]}'
-```
-Responses include the Cypher used plus formatted results depending on the branch taken.
 
-## Data + ingestion
-- `infocsv/` holds local CSV exports (ignored by git). Keep large files out of commits.
-- To rebuild the Neo4j graph, place the expected CSVs in Neo4j’s `import` folder (see docstring in `superDBmaker.py`) and run:
+### 4. Running the Application
+```bash
+uvicorn main:app --host 0.0.0.0 --port 5001 --reload
 ```
-python superDBmaker.py --wipe
-```
-- Logs from the Flask app are written to `log.txt`.
+Open `http://localhost:5001` in your browser.
 
-## Notes
-- GitHub rejects pushes with files >100 MB; rely on the `.gitignore` in `infocsv/` to avoid committing large datasets.
-- `openalex_to_csv.py` and related helpers assist in exporting OpenAlex data if you need fresh CSVs.
+## 🔍 Troubleshooting
+
+### Neo4j Authentication
+If search results are empty and the logs show `Neo.ClientError.Security.Unauthorized`, double-check your `.env` credentials. Verify you can log into `http://localhost:7474` with the same username and password.
+
+### API Key Issues
+Ensure your `OPENAI_API_KEY` is active and has sufficient credits. The system uses `gpt-4o-mini` for cost-effective, real-time responses.
+
+## 📊 System Analysis
+For a detailed analysis of the system's control flow, see [CFG_README.md](CFG_README.md).

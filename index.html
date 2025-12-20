@@ -1,541 +1,1218 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-    <meta charset="UTF-8" />
-    <title>Research Database Query Interface</title>
+  <meta charset="UTF-8">
+  <title>UAlberta Research Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color-scheme: dark light;
+    }
 
-    <!--
-      ──────────────────────────────────────────────────────────────────────
-      GLOBAL STYLES
-      All colours and spacings are chosen to match the University palette
-      and to ensure AAA-grade contrast for accessibility.
-      Stakeholders: change only the hex codes below if branding updates.
-      ──────────────────────────────────────────────────────────────────────
-    -->
-    <style>
-        /* —— Page layout and typography —— */
-        body {
-            font-family: Arial, sans-serif;  /* Ubiquitous fallback font */
-            margin: 2rem;                    /* Comfortable white-space */
-            background-color: #ffffff;       /* White workspace */
-            color: #333;                     /* Dark-grey text for readability */
-        }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0f172a;
+      color: #e5e7eb;
+      display: flex;
+      justify-content: center;
+    }
 
-        /* —— Header area with title + logo —— */
-        header {
-            position: relative;
-            text-align: left;
-            margin-bottom: 1rem;
-        }
-        header img {             /* University/Company logo */
-            position: absolute;
-            top: -40px;          /* Pops the logo slightly above title */
-            right: 0;
-            height: 90px;
-            width: auto;
-        }
-        h1 {
-            color: #1e6e37;      /* Institutional green */
-            margin-top: 0;
-        }
+    .app {
+      max-width: 960px;
+      width: 100%;
+      padding: 1.5rem;
+    }
 
-        /* —— Chat transcript box —— */
-        #chat {
-            border: 2px solid #1e6e37;
-            padding: 1rem;
-            height: 60vh;          /* Occupies 60 % of viewport height */
-            overflow-y: auto;      /* Scroll when content exceeds height */
-            margin-bottom: 1rem;
-            background-color: #f9fff6; /* Very-light green background */
-            border-radius: 8px;
-        }
-        .message { margin-bottom: 0.5rem; }
-        .message.user      { text-align: right; color: #1e6e37; }
-        .message.assistant { text-align: left;  color: #a38b00; }
+    h1 {
+      font-size: 1.75rem;
+      margin-bottom: 0.25rem;
+    }
 
-        /* —— Input bar (text field + Send button) —— */
-        #input-container {
-            width: 600px;          /* Fixed width on desktops */
-            max-width: 90%;        /* Shrinks gracefully on mobiles */
-            margin: 0 auto 1rem;
-            display: flex;
-            gap: 10px;             /* Space between field and button */
-        }
-        #question {
-            flex-grow: 1;          /* Text field consumes remaining width */
-            height: 40px;
-            padding: 0 1rem;
-            border: 1px solid #1e6e37;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 1rem;
-        }
-        #sendBtn {
-            width: 120px;
-            height: 40px;
-            background-color: #1e6e37;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
-        }
-        #sendBtn:hover { background-color: #154d26; }  /* Darker on hover */
+    .subtitle {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-bottom: 1.5rem;
+    }
 
-        /* —— Result formatting helpers —— */
-        pre {
-            background: #f4f4f4;
-            padding: 0.5rem;
-            overflow-x: auto;
-            border-radius: 4px;
-        }
-        table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #e8f5e9;
-            color: #1e6e37;
-        }
+    .card {
+      background: #020617;
+      border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.6);
+      border: 1px solid #1e293b;
+      margin-bottom: 1rem;
+    }
 
-        /* —— Buttons shown when user must choose “shallow” vs “deep” —— */
-        .choice-buttons { margin: 10px 0; }
-        .choice-buttons button {
-            margin-right: 10px;
-            padding: 5px 15px;
-        }
+    .row {
+      display: flex;
+      flex-direction: row;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
 
-        /* —— Highlight box for AI-generated analysis summaries —— */
-        .analysis-summary {
-            background-color: #f0f7ff;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #1e6e37;
-            margin: 10px 0;
-        }
-    </style>
+    .col {
+      flex: 1 1 0;
+      min-width: 260px;
+    }
+
+    textarea {
+      width: 100%;
+      resize: vertical;
+      min-height: 110px;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      border: 1px solid #334155;
+      background: #020617;
+      color: #e5e7eb;
+      font-family: inherit;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+    }
+
+    textarea:focus {
+      outline: 2px solid #38bdf8;
+      border-color: #38bdf8;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      padding: 0.55rem 1.2rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: transform 0.08s ease-out, box-shadow 0.08s ease-out, opacity 0.2s;
+      box-shadow: 0 10px 20px rgba(96, 165, 250, 0.35);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    button:not(:disabled):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(96, 165, 250, 0.4);
+    }
+
+    .button-row {
+      margin-top: 0.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .status {
+      font-size: 0.85rem;
+      color: #9ca3af;
+    }
+
+    .status.loading::before {
+      content: "● ";
+      color: #38bdf8;
+    }
+
+    .status.error {
+      color: #f97373;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 0.5rem;
+    }
+
+    pre {
+      background: #020617;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      border: 1px solid #111827;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .answer-text {
+      font-size: 0.98rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      height: 400px;
+      overflow-y: auto;
+      background: #0b1224;
+      border: 1px solid #1e293b;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+    }
+
+    details {
+      margin-top: 0.5rem;
+    }
+
+    details>summary {
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #9ca3af;
+    }
+
+    .tagline {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 0.5rem;
+    }
+
+    .candidate-list {
+      display: none;
+      /* Hidden by default */
+      margin-top: 0.75rem;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
+
+    .candidate-list.visible {
+      display: flex;
+    }
+
+    .candidate-info {
+      font-size: 0.9rem;
+      color: #9ca3af;
+    }
+
+    .candidate-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 0.5rem;
+      border: 1px solid #1e293b;
+      background: #020617;
+    }
+
+    .candidate-label {
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    .candidate-meta {
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    .candidate-btn {
+      align-self: flex-start;
+      margin-top: 0.25rem;
+      padding: 0.3rem 0.8rem;
+      font-size: 0.85rem;
+    }
+
+    .candidate-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+    }
+
+    .candidate-scroll {
+      display: none;
+      margin-top: 0.5rem;
+      border: 1px solid #1e293b;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: #0b1224;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .candidate-scroll.visible {
+      display: block;
+    }
+
+    .candidate-scroll .candidate-name-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: #111827;
+      border: 1px solid #1f2937;
+      color: #e5e7eb;
+      border-radius: 0.35rem;
+      padding: 0.4rem 0.55rem;
+      margin: 0.25rem 0;
+      cursor: pointer;
+    }
+
+    .candidate-scroll .candidate-name-btn:hover {
+      background: #1f2937;
+    }
+
+    /* Sidebar & Debug Panel Styles */
+    .app-container {
+      display: flex;
+      gap: 1.5rem;
+      position: relative;
+    }
+
+    .main-content {
+      flex: 1;
+      width: 100%;
+      transition: width 0.3s ease;
+    }
+
+    .debug-sidebar {
+      position: fixed;
+      top: 0;
+      right: -400px;
+      /* Hidden by default */
+      width: 400px;
+      height: 100vh;
+      background: #020617;
+      border-left: 1px solid #1e293b;
+      padding: 1.5rem;
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+      overflow-y: auto;
+      transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 1000;
+      box-sizing: border-box;
+    }
+
+    .debug-sidebar.open {
+      right: 0;
+    }
+
+    .debug-toggle-btn {
+      position: fixed;
+      top: 1.5rem;
+      right: 1.5rem;
+      z-index: 1100;
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      background: #1e293b;
+      color: #9ca3af;
+      border: 1px solid #334155;
+      cursor: pointer;
+      font-size: 0.85rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s;
+    }
+
+    /* Chat Interface Styles */
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 85vh;
+      /* Occupy most of the screen height */
+      max-width: 900px;
+      margin: 0 auto;
+      background: #0b1224;
+      border: 1px solid #1e293b;
+      border-radius: 1rem;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .message {
+      max-width: 80%;
+      padding: 1rem;
+      border-radius: 1rem;
+      line-height: 1.5;
+      position: relative;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #1e293b;
+      color: #e5e7eb;
+      border-bottom-right-radius: 0.2rem;
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+      background: #172554;
+      /* Dark blueish */
+      color: #e5e7eb;
+      border-bottom-left-radius: 0.2rem;
+    }
+
+    .message.loading {
+      color: #9ca3af;
+      background: transparent;
+      padding-left: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Animated thinking dots */
+    .thinking-dots {
+      display: inline-flex;
+      gap: 0.3rem;
+      align-items: center;
+    }
+
+    .thinking-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #60a5fa;
+      animation: thinking-bounce 1.4s infinite ease-in-out both;
+    }
+
+    .thinking-dots span:nth-child(1) {
+      animation-delay: -0.32s;
+    }
+
+    .thinking-dots span:nth-child(2) {
+      animation-delay: -0.16s;
+    }
+
+    @keyframes thinking-bounce {
+
+      0%,
+      80%,
+      100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+      }
+
+      40% {
+        transform: scale(1.2);
+        opacity: 1;
+      }
+    }
+
+    .chat-input-area {
+      background: #020617;
+      border-top: 1px solid #1e293b;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    /* Logo in bottom left */
+    .logo-corner {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      width: 250px;
+      opacity: 1.0;
+      /* Full visibility */
+      z-index: 10;
+      pointer-events: none;
+      /* Removed mix-blend-mode to render the image "as is".
+         If the image itself is transparent, it will show the page background (#0f172a). */
+    }
+
+    /* Copy Button */
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid #475569;
+      border-radius: 0.4rem;
+      color: #cbd5e1;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-top: 0.85rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .copy-btn:hover {
+      background: #475569;
+      color: #fff;
+      border-color: #64748b;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .copy-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Override textarea styles for chat input */
+    .chat-input-area textarea {
+      min-height: 120px;
+      /* Increased from 60px */
+      max-height: 250px;
+      border-radius: 0.5rem;
+      resize: vertical;
+    }
+
+    /* Candidate list inside message */
+    .message .candidate-list {
+      display: flex;
+      margin-top: 1rem;
+      padding: 0;
+      background: transparent;
+      border: none;
+      max-height: none;
+    }
+
+    .message .candidate-item {
+      background: #1e293b;
+      border-color: #334155;
+    }
+
+    .debug-toggle-btn:hover {
+      background: #334155;
+      color: #fff;
+    }
+
+    /* Prevent overlap with the fixed button */
+    header {
+      padding-right: 120px;
+    }
+
+    .debug-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      margin-top: 3rem;
+      /* Space for the toggle button */
+    }
+
+    /* Adjust layout */
+    .row {
+      display: block;
+      /* Stack vertically if needed, but here we just have main content */
+    }
+
+    .col {
+      width: 100%;
+    }
+
+    @media (max-width: 640px) {
+      .app {
+        padding: 1rem;
+      }
+
+      .debug-sidebar {
+        width: 100%;
+        right: -100%;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+    }
+
+    /* Debug Log Modal */
+    .debug-log-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .debug-log-modal.open {
+      display: flex;
+    }
+
+    .debug-log-content {
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 1rem;
+      width: 90%;
+      max-width: 1000px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+    }
+
+    .debug-log-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .debug-log-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+
+    .debug-log-close {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #9ca3af;
+      border-radius: 0.5rem;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    .debug-log-close:hover {
+      background: #334155;
+      color: #fff;
+    }
+
+    .debug-log-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+    }
+
+    .debug-log-entry {
+      background: #0b1224;
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .debug-log-entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .debug-log-timestamp {
+      font-size: 0.85rem;
+      color: #64748b;
+      font-family: monospace;
+    }
+
+    .debug-log-section {
+      margin-bottom: 1rem;
+    }
+
+    .debug-log-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .debug-log-section-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #9ca3af;
+      margin-bottom: 0.5rem;
+    }
+
+    .debug-log-section-content {
+      background: #020617;
+      border: 1px solid #111827;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .debug-log-btn {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.6rem 1rem;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #9ca3af;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    .debug-log-btn:hover {
+      background: #334155;
+      color: #fff;
+    }
+  </style>
+  <!-- Marked.js for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    /* Markdown Styles in Chat */
+    .message ul,
+    .message ol {
+      margin-left: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .message li {
+      margin-bottom: 0.5rem;
+    }
+
+    .message strong {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .message p {
+      margin-bottom: 1rem;
+    }
+
+    .message p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Link styling */
+    .message a {
+      color: #60a5fa;
+      text-decoration: underline;
+      transition: color 0.2s;
+    }
+
+    .message a:hover {
+      color: #93c5fd;
+    }
+  </style>
 </head>
 
 <body>
-    <!--
-      ──────────────────────────────────────────────────────────────────────
-      TITLE & LOGO
-      Appears once at the top of the interface.
-      Stakeholders: Swap “el1.jpg” to update branding; keep dimensions.
-      ──────────────────────────────────────────────────────────────────────
-    -->
-    <header>
-        <h1>Research Database Query Interface</h1>
-        <img src="/el1.jpg" alt="Logo" />
-    </header>
+  <div class="logo-corner" style="position: absolute; top: 0; right: 100%; margin-right: 20px;">
+    <img src="./logos/txtProceed.png" alt="Top Logo"
+      style="width: 50%; display: block; margin-left: auto; margin-bottom: 10px;margin-top: 40px;">
 
-    <!-- Chat history container -->
-    <div id="chat"></div>
+    <img src="./logos/logoProceed.png" alt="Logo" style="width: 70%; display: block; margin-left: auto;">
+  </div>
 
-    <!--
-      INPUT BAR
-      Users type questions here; the Send button triggers the back-end call.
-    -->
-    <div id="input-container">
-        <input type="text" id="question" placeholder="Enter your research question here..." />
-        <button id="sendBtn">Send</button>
+  <button class="debug-toggle-btn" id="debugToggleBtn">Show Debug</button>
+
+  <div class="app app-container">
+    <!-- Main Content Area -->
+    <div class="main-content">
+      <!-- Chat Interface -->
+      <div class="chat-container">
+
+        <!-- Header inside chat (optional, or keep it above) -->
+        <div style="padding: 1rem; border-bottom: 1px solid #1e293b; background: #020617;">
+          <h1 style="font-size: 1.25rem; margin: 0;">UAlberta Research Assistant</h1>
+          <div style="font-size: 0.8rem; color: #64748b;">
+            Neo4j + GPT-5 Pipeline. Ask about researchers, topics, or trends.
+          </div>
+        </div>
+
+        <div id="chatHistory" class="chat-history">
+          <!-- Welcome Message -->
+          <div class="message assistant">
+            Hello! I can help you find research information at the University of Alberta.
+            Try asking about specific researchers (e.g., "Marek Reformat"), topics ("smart grids"), or departments.
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <textarea id="questionInput" placeholder="Type your question here... (Cmd+Enter to send)"
+            oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"></textarea>
+
+          <div class="button-row" style="justify-content: flex-end;">
+            <span id="statusText" class="status" style="margin-right: auto; padding-left: 0.5rem;"></span>
+            <button id="askBtn">
+              <span id="askBtnLabel">Send</span>
+            </button>
+            <button id="stopBtn"
+              style="display: none; background: #f97373; box-shadow: 0 10px 20px rgba(249, 115, 115, 0.35);">
+              <span>Stop</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!--
-      ──────────────────────────────────────────────────────────────────────
-      JAVASCRIPT LOGIC
-      Handles in-browser state (chat history) and AJAX calls to /query.
-      Every function is documented with triple-slash comments (///) for clarity.
-      ──────────────────────────────────────────────────────────────────────
-    -->
-    <script>
-        /* ── Local state ─────────────────────────────────────────────── */
-        const history = [];                   // Chat history sent to Flask
-        const chatDiv = document.getElementById('chat');
-        const input   = document.getElementById('question');
-        const sendBtn = document.getElementById('sendBtn');
+    <!-- Hidden Sidebar for Debug -->
+    <aside class="debug-sidebar" id="debugSidebar">
+      <div class="debug-header">
+        <h2>Debug Info</h2>
+      </div>
 
-        /// addMessage(role, text)
-        /// --------------------------------------------
-        /// Renders a single chat bubble in the #chat div.
-        /// Params:
-        ///   role — 'user' | 'assistant' (determines colour & alignment)
-        ///   text — HTML string to display inside the bubble
-        function addMessage(role, text) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${role}`;
-            msgDiv.innerHTML = text;
-            chatDiv.appendChild(msgDiv);
-            // Auto-scroll so latest message is always visible
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-        }
-         // --- NEW: Render “people matches” with clickable names -----------------
-        function renderNameSuggestions(matches, originalQueryText) {
-        if (!matches || matches.length === 0) return;
+      <div class="debug-content">
+        <details open>
+          <summary>Intent (classifier output)</summary>
+          <pre id="intentJson">–</pre>
+        </details>
 
-        const box = document.createElement('div');
-        box.className = 'analysis-summary';
-        let html = `<strong>People matching “${originalQueryText}”:</strong><br>`;
-        html += matches.map(m => 
-            `<button class="name-suggestion" data-name="${m.normalized_name}" title="${m.name}">
-                ${m.name}
-             </button>`
-        ).join(' ');
-        box.innerHTML = html;
-        chatDiv.appendChild(box);
+        <details>
+          <summary>Cypher (generated query)</summary>
+          <pre id="cypherText">–</pre>
+        </details>
 
-        box.querySelectorAll('.name-suggestion').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const norm = btn.getAttribute('data-name');
-                loadResearcherSummary(norm);
-            });
-        });
-    }
+        <details>
+          <summary>DB rows (graph query results)</summary>
+          <pre id="dbRowsText">–</pre>
+        </details>
 
-     // --- NEW: Fetch and show a researcher’s quick profile ------------------
-    async function loadResearcherSummary(nameOrNorm) {
-        addMessage('assistant', '<em>Loading researcher profile...</em>');
-        try {
-            const res = await fetch('/researcher_summary', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: nameOrNorm })
-            });
-            const data = await res.json();
-            chatDiv.lastChild.remove();
+        <details>
+          <summary>Semantic hits (vector search)</summary>
+          <pre id="semanticHitsText">–</pre>
+        </details>
+      </div>
 
-            if (res.ok && data.response_type === 'researcher_summary') {
-                renderResearcherSummary(data);
-            } else {
-                addMessage('assistant', `<span style="color:red;">${data.error || 'Could not load profile.'}</span>`);
-            }
-        } catch (e) {
-            chatDiv.lastChild.remove();
-            addMessage('assistant', `<span style="color:red;">${e.message}</span>`);
-        }
-    }
-      function renderTable(rows) {
-        if (!rows || rows.length === 0) return '<em>No data.</em>';
-        const cols = Object.keys(rows[0]);
-        let html = '<table><tr>';
-        cols.forEach(c => html += `<th>${c}</th>`);
-        html += '</tr>';
-        rows.forEach(r => {
-            html += '<tr>';
-            cols.forEach(c => {
-                const v = r[c];
-                html += `<td>${Array.isArray(v) ? v.join(', ') : (v ?? '')}</td>`;
-            });
-            html += '</tr>';
-        });
-        html += '</table>';
-        return html;
-    }
+      <button class="debug-log-btn" id="debugLogBtn">View Debug Log</button>
+      <button class="debug-log-btn" id="cfgBtn">Control Flow Graph</button>
+    </aside>
+  </div>
 
-    function renderResearcherSummary(data) {
-        const { researcher, stats, coauthors, keywords, tags, publications } = data;
+  <!-- Debug Log Modal -->
+  <div class="debug-log-modal" id="debugLogModal">
+    <div class="debug-log-content">
+      <div class="debug-log-header">
+        <h2>Debug Log</h2>
+        <button class="debug-log-close" id="debugLogClose">Close</button>
+      </div>
+      <div class="debug-log-body" id="debugLogBody">
+        <div style="text-align: center; color: #64748b; padding: 2rem;">
+          Loading debug log...
+        </div>
+      </div>
+    </div>
+  </div>
 
-        addMessage('assistant', `
-            <div class="analysis-summary">
-                <h3 style="margin:0 0 .5rem 0;">${researcher}</h3>
-                <div><strong>Publications:</strong> ${stats.publications} ${
-                    stats.first_year ? `(${stats.first_year}–${stats.latest_year})` : ''}</div>
-                <hr>
-                <div><strong>Top Co-authors</strong></div>
-                ${renderTable(coauthors)}
-                <br>
-                <div><strong>Keywords</strong></div>
-                ${renderTable(keywords)}
-                <br>
-                <div><strong>Tags</strong></div>
-                ${renderTable(tags)}
-                <br>
-                <div><strong>Latest Publications (up to 20)</strong></div>
-                ${renderTable(publications)}
-            </div>
-        `);
-    }
+  <script>
+    const questionInput = document.getElementById('questionInput');
+    const askBtn = document.getElementById('askBtn');
+    const askBtnLabel = document.getElementById('askBtnLabel');
+    const statusText = document.getElementById('statusText');
+    const chatHistory = document.getElementById('chatHistory');
 
-     // --- NEW: Ask backend for partial-name matches in parallel -------------
-    async function searchNameSuggestions(text) {
-        try {
-            const res = await fetch('/search_researchers', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ q: text })
-            });
-            const data = await res.json();
-            if (data.matches && data.matches.length) {
-                renderNameSuggestions(data.matches, text);
-            }
-        } catch {
-            /* non-fatal; ignore */
-        }
-    }
+    // Debug elements
+    const intentJson = document.getElementById('intentJson');
+    const cypherText = document.getElementById('cypherText');
+    const dbRowsText = document.getElementById('dbRowsText');
+    const semanticHitsText = document.getElementById('semanticHitsText');
 
-        /// sendQuery()
-        /// --------------------------------------------
-        /// Core workflow triggered by Send button or Enter key:
-        ///  1. Push user input into history.
-        ///  2. POST history to /query (Flask back-end).
-        ///  3. Handle three possible reply types:
-        ///       • choice_request  – ask user “shallow or deep?”
-        ///       • fallback_deep   – automatic second call using deep analysis
-        ///       • normal results  – tables / Cypher / analysis
-        async function sendQuery() {
-            const question = input.value.trim();
+    function appendMessage(role, text) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${role}`;
 
-            // Detect if user just clicked “shallow” / “deep” (no new text)
-            // replace your isControl computation with:
-            const isControl =
-            history.length > 0 &&
-            (
-                ['shallow', 'deep'].includes(history[history.length - 1].content.toLowerCase())
-                || history[history.length - 1].content.toLowerCase().startsWith('select_researcher:')
-            );
+      const contentDiv = document.createElement('div');
 
-
-            if (!question && !isControl) return;  // Ignore blank submits
-
-            // Echo user message in chat
-            if (question) {
-                addMessage('user', question);
-                history.push({ role: 'user', content: question });
-                input.value = '';
-            }
-
-            // Placeholder while waiting for Flask
-            addMessage('assistant', '<em>Processing your query...</em>');
-
-            try {
-                const response = await fetch('/query', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ history })
-                });
-
-                const raw = await response.text();   // May or may not be JSON
-                let data;
-                try { data = JSON.parse(raw); }
-                catch (e) {
-                    // Show raw response for easier debugging
-                    chatDiv.lastChild.remove();
-                    addMessage(
-                        'assistant',
-                        `<span style="color:red;">Server did not return JSON (showing first 800 chars):</span><br><pre>${raw.slice(0, 800)}</pre>`
-                    );
-                    return;
-                }
-                chatDiv.lastChild.remove();  // Remove “processing…”
-
-                /* —— 1) User must choose shallow vs deep —— */
-                if (data.response_type === 'choice_request') {
-                    addMessage('assistant', data.message);
-
-                    // Inline buttons that push a control word into history
-                    const choiceDiv = document.createElement('div');
-                    choiceDiv.className = 'choice-buttons';
-                    choiceDiv.innerHTML = `
-                        <button id="shallowBtn">Shallow Analysis</button>
-                        <button id="deepBtn">Deep Analysis</button>
-                    `;
-                    chatDiv.appendChild(choiceDiv);
-
-                    document.getElementById('shallowBtn').addEventListener('click', () => {
-                        history.push({ role: 'user', content: 'shallow' });
-box.querySelectorAll('.name-suggestion').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const norm = btn.getAttribute('data-norm');
-
-    // Build the *full* history we intend to send (do not rely on sendQuery’s internals)
-    const fullHistory = [
-      ...history,
-      { role: 'user', content: `select_researcher:${norm}` }
-    ];
-
-    // Optional: echo a small “selected” note in the chat
-    addMessage('user', `(selected) ${btn.title || btn.textContent}`);
-
-    // Show a temporary “processing” message
-    addMessage('assistant', '<em>Processing your selection...</em>');
-
-    try {
-      const res = await fetch('/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: fullHistory }) // ← key line
-      });
-      const raw = await res.text();
-      chatDiv.lastChild.remove(); // remove “processing”
-      let data;
+      // Use marked.parse to render Markdown
       try {
-        data = JSON.parse(raw);
+        contentDiv.innerHTML = marked.parse(text);
+        // Make all links open in new tab
+        contentDiv.querySelectorAll('a').forEach(link => {
+          link.setAttribute('target', '_blank');
+          link.setAttribute('rel', 'noopener noreferrer');
+        });
       } catch (e) {
-        addMessage('assistant',
-          `<span style="color:red;">Server did not return JSON (first 800):</span><br><pre>${raw.slice(0,800)}</pre>`);
-        return;
+        console.error("Marked error:", e);
+        contentDiv.textContent = text;
       }
 
-      // Keep the in-memory history in sync *after* a successful round-trip
-      history.push({ role: 'user', content: `select_researcher:${norm}` });
+      msgDiv.appendChild(contentDiv);
 
-      // Reuse your existing renderer
-      processResponse(data);
-    } catch (err) {
-      chatDiv.lastChild.remove();
-      addMessage('assistant', `<span style="color:red;">${err.message}</span>`);
+      // Add Copy Button for Assistant messages
+      if (role === 'assistant') {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy
+        `;
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(text).then(() => {
+            const originalHTML = copyBtn.innerHTML;
+            copyBtn.innerHTML = `
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              Copied!
+            `;
+            setTimeout(() => {
+              copyBtn.innerHTML = originalHTML;
+            }, 2000);
+          });
+        };
+        msgDiv.appendChild(copyBtn);
+      }
+
+      chatHistory.appendChild(msgDiv);
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+      return msgDiv;
     }
-  });
-});
-                        sendQuery();  // Re-trigger with choice
-                    });
-                    document.getElementById('deepBtn').addEventListener('click', () => {
-                        history.push({ role: 'user', content: 'deep' });
-                        sendQuery();
-                    });
-                    return;   // Wait for user click
-                }
-                
-                /* ── Researcher disambiguation (partial name match) ───────────── */
-                if (data.response_type === 'researcher_disambiguation') {
-                const box = document.createElement('div');
-                box.className = 'analysis-summary';
-                const listHTML = (data.candidates || []).map(c =>
-                    `<button class="name-suggestion" data-norm="${c.normalized_name}" title="${c.name}">
-                    ${c.name}
-                    </button>`
-                ).join(' ');
-                box.innerHTML = `<strong>${data.message}</strong><br>${listHTML}`;
-                chatDiv.appendChild(box);
 
-                box.querySelectorAll('.name-suggestion').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                    const norm = btn.getAttribute('data-norm');
-                    // push control message and re-send (no text input needed)
-                    history.push({ role: 'user', content: `select_researcher:${norm}` });
-                    sendQuery();
-                    });
-                });
-                return;
-                }
-
-                /* —— 2) Back-end auto-decided to go “deep” —— */
-                if (data.response_type === 'fallback_deep') {
-                    const fallbackResponse = await fetch('/query', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            history: [...history, { role: 'user', content: 'deep' }]
-                        })
-                    });
-                    const fallbackData = await fallbackResponse.json();
-                    processResponse(fallbackData);
-                    return;
-                }
-
-                /* —— 3) Regular result payload —— */
-                processResponse(data);
-
-            } catch (error) {
-                chatDiv.lastChild.remove();
-                addMessage(
-                    'assistant',
-                    `<span style="color:red;">Error: ${error.message}</span>`
-                );
-            }
-        }
-
-        /// processResponse(data)
-        /// --------------------------------------------
-        /// Takes a JSON payload from the back-end and renders:
-        ///   • Cypher preview (for tech audiences)
-        ///   • Data table (if rows returned)
-        ///   • Plain-English analysis summary
-        ///   • “No results” fallback
-        function processResponse(data) {
-            let displayed = false;
-
-            // 1) Show Cypher query (transparent, builds trust with tech teams)
-            if (data.cypher_query) {
-                addMessage('assistant',
-                    `<strong>Cypher Query:</strong><br><pre>${data.cypher_query}</pre>`);
-            }
-
-            // 2) Render tabular results, collapsible for readability
-            if (data.results && data.results.length > 0) {
-                const cols = Object.keys(data.results[0]);
-                let tableId = 'resultTable_' + Date.now();
-                let tableHTML = `
-                    <button onclick="toggleTable('${tableId}')">Expand/Collapse Table</button>
-                    <div id="${tableId}" style="display:none;">
-                        <table><tr>
-                `;
-                cols.forEach(col => tableHTML += `<th>${col}</th>`);
-                tableHTML += '</tr>';
-                data.results.forEach(row => {
-                    tableHTML += '<tr>';
-                    cols.forEach(col => {
-                        const value = row[col] || '';
-                        tableHTML += `<td>${Array.isArray(value) ? value.join(', ') : value}</td>`;
-                    });
-                    tableHTML += '</tr>';
-                });
-                tableHTML += '</table></div>';
-                addMessage('assistant', tableHTML);
-                displayed = true;
-            }
-
-            // 3) Show narrative analysis (AI summarisation layer)
-            if (data.analysis) {
-                const analysisDiv = document.createElement('div');
-                analysisDiv.className = 'analysis-summary';
-                analysisDiv.innerHTML = `<strong>${
-                    data.response_type === 'trend_analysis'
-                        ? 'Trend Analysis Results:'
-                        : 'Topic Analysis:'
-                }</strong><br>${data.analysis}`;
-                chatDiv.appendChild(analysisDiv);
-                displayed = true;
-            }
-
-            // 4) Graceful fallback if nothing came back
-            if (!displayed) {
-                addMessage('assistant', '<em>No results found for this query.</em>');
-            }
-        }
-
-        /// toggleTable(id)
-        /// --------------------------------------------
-        /// Simple utility to collapse / expand long result tables.
-        function toggleTable(id) {
-            const el = document.getElementById(id);
-            el.style.display = el.style.display === 'none' ? 'block' : 'none';
-        }
-
-        /* ── Event listeners ─────────────────────────────────────────── */
-        sendBtn.addEventListener('click', sendQuery);
-        input.addEventListener('keypress', e => { if (e.key === 'Enter') sendQuery(); });
-    </script>
-    
-    <style>
-    /* small pill buttons for name suggestions */
-    .name-suggestion {
-        display: inline-block;
-        margin: 6px 6px 0 0;
-        padding: 6px 12px;
-        border: 1px solid #1e6e37;
-        background: #fff;
-        color: #1e6e37;
-        border-radius: 999px;
-        cursor: pointer;
+    function appendHtmlMessage(role, htmlContent) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${role}`;
+      msgDiv.innerHTML = htmlContent;
+      chatHistory.appendChild(msgDiv);
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+      return msgDiv;
     }
-    .name-suggestion:hover { background: #e8f5e9; }
-    </style>
+
+    // Special renderer for candidates that displays *inside* the chat stream
+    function renderCandidatesInChat(candidates, originalQuestion, typedAuthor) {
+      const container = document.createElement('div');
+      container.className = 'candidate-list visible'; // reuse visible style
+      container.style.marginTop = '1rem';
+
+      const info = document.createElement('div');
+      info.className = 'candidate-info';
+      info.textContent = 'Possible Matches:';
+      container.appendChild(info);
+
+      candidates.slice(0, 10).forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'candidate-item';
+
+        const label = document.createElement('div');
+        label.className = 'candidate-label';
+        label.textContent = c.name || c.normalized_name || '(unnamed)';
+
+        const meta = document.createElement('div');
+        meta.className = 'candidate-meta';
+        if (Array.isArray(c.departments) && c.departments.length) {
+          meta.textContent = c.departments.join(', ');
+        }
+
+        const btn = document.createElement('button');
+        btn.className = 'candidate-btn';
+        btn.textContent = 'Select';
+        btn.onclick = () => {
+          // When clicked, send the userId directly to backend
+          const displayName = c.name || c.normalized_name;
+          let newQuestion = originalQuestion;
+          // Simple naive replacement
+          if (typedAuthor) {
+            // Try to replace the typed name with the specific selected name
+            const escapedAuth = typedAuthor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            newQuestion = newQuestion.replace(new RegExp(escapedAuth, 'i'), displayName);
+          } else {
+            newQuestion += ` (regarding ${displayName})`;
+          }
+
+          // Put into input and send with userId
+          questionInput.value = newQuestion;
+          askQuestionWithUserId(c.userId);
+        };
+
+        item.appendChild(label);
+        if (meta.textContent) item.appendChild(meta);
+        item.appendChild(btn);
+        container.appendChild(item);
+      });
+
+      return container;
+    }
+
+    // AbortController for Stopping Thinking
+    let abortController = null;
+
+    // Helper function to ask question with userId
+    async function askQuestionWithUserId(userId) {
+      await askQuestion(userId);
+    }
+
+    async function askQuestion(selectedUserId = null) {
+      const question = questionInput.value.trim();
+      if (!question) return;
+
+      const startTime = performance.now();
+      abortController = new AbortController();
+      const signal = abortController.signal;
+
+      // 1. User Message
+      appendMessage('user', question);
+      questionInput.value = '';
+      questionInput.style.height = ''; // reset height
+
+      // 2. Loading Indicator with animated dots
+      const loadingMsg = document.createElement('div');
+      loadingMsg.className = 'message loading';
+      loadingMsg.innerHTML = `
+        <span style="color: #9ca3af;">Thinking</span>
+        <div class="thinking-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      `;
+      chatHistory.appendChild(loadingMsg);
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+
+      statusText.textContent = "Processing...";
+      askBtn.disabled = true;
+      stopBtn.style.display = 'inline-flex';
+
+      try {
+        const requestBody = { question };
+        if (selectedUserId) {
+          requestBody.selected_user_id = selectedUserId;
+        }
+
+        const res = await fetch("/api/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+          signal: signal
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+
+        const data = await res.json();
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(1);
+
+        // Remove loading message
+        loadingMsg.remove();
+
+        // Update Debug Panels (always show latest)
+        intentJson.textContent = data.intent ? JSON.stringify(data.intent, null, 2) : "–";
+        cypherText.textContent = data.cypher || "–";
+        dbRowsText.textContent = data.dbRows ? JSON.stringify(data.dbRows, null, 2) : "[]";
+        semanticHitsText.textContent = data.semanticHits ? JSON.stringify(data.semanticHits, null, 2) : "[]";
+
+        // Log debug information to file
+        logDebugEntry(question, data);
+
+        // 3. Handle Candidates (Disambiguation)
+        if (data.candidates && data.candidates.length > 0) {
+          const assistantMsg = appendMessage('assistant', data.answer || "I found multiple researchers. Please select one:");
+          const candidateNodes = renderCandidatesInChat(data.candidates, question, (data.intent && data.intent.author) || null);
+          assistantMsg.appendChild(candidateNodes);
+          statusText.textContent = `Waiting for selection... (${duration}s)`;
+          chatHistory.scrollTop = chatHistory.scrollHeight;
+        } else {
+          // Normal Answer
+          appendMessage('assistant', data.answer || "(No answer returned)");
+          statusText.textContent = `Done in ${duration}s.`;
+        }
+
+      } catch (err) {
+        loadingMsg.remove();
+        if (err.name === 'AbortError') {
+          appendMessage('assistant', "Thinking stopped.");
+          statusText.textContent = "Stopped.";
+        } else {
+          appendMessage('assistant', `Error: ${err.message}`);
+          console.error(err);
+          statusText.textContent = "Error occurred.";
+        }
+      } finally {
+        askBtn.disabled = false;
+        stopBtn.style.display = 'none';
+        abortController = null;
+      }
+    }
+
+    const debugToggleBtn = document.getElementById('debugToggleBtn');
+    const debugSidebar = document.getElementById('debugSidebar');
+
+    debugToggleBtn.addEventListener('click', () => {
+      debugSidebar.classList.toggle('open');
+      if (debugSidebar.classList.contains('open')) {
+        debugToggleBtn.textContent = 'Hide Debug';
+      } else {
+        debugToggleBtn.textContent = 'Show Debug';
+      }
+    });
+
+    const stopBtn = document.getElementById('stopBtn');
+
+    stopBtn.addEventListener('click', () => {
+      if (abortController) {
+        abortController.abort();
+      }
+    });
+
+    askBtn.addEventListener('click', () => askQuestion());
+    questionInput.addEventListener('keydown', (e) => {
+      // If Enter is pressed without Cmd/Ctrl, send the question
+      if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        askQuestion();
+      }
+      // If Cmd/Ctrl + Enter is pressed, insert a new line (default behavior for textarea is usually Enter, 
+      // but we hijacked it above, so we let the browser handle the newline for Cmd+Enter or we do it manually)
+      else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        const start = questionInput.selectionStart;
+        const end = questionInput.selectionEnd;
+        const value = questionInput.value;
+        questionInput.value = value.substring(0, start) + "\n" + value.substring(end);
+        questionInput.selectionStart = questionInput.selectionEnd = start + 1;
+        // Trigger the oninput to resize the textarea
+        questionInput.dispatchEvent(new Event('input'));
+      }
+    });
+
+    // Debug Log Functionality
+    const debugLogBtn = document.getElementById('debugLogBtn');
+    const debugLogModal = document.getElementById('debugLogModal');
+    const debugLogClose = document.getElementById('debugLogClose');
+    const debugLogBody = document.getElementById('debugLogBody');
+
+    async function logDebugEntry(question, data) {
+      const entry = {
+        timestamp: new Date().toISOString(),
+        question: question,
+        answer: data.answer || '',
+        intent: data.intent || {},
+        cypher: data.cypher || '',
+        dbRows: data.dbRows || [],
+        semanticHits: data.semanticHits || []
+      };
+
+      try {
+        await fetch('/api/log-debug', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entry)
+        });
+      } catch (err) {
+        console.error('Failed to log debug entry:', err);
+      }
+    }
+
+    async function loadDebugLog() {
+      try {
+        const res = await fetch('/api/debug-log');
+        if (!res.ok) throw new Error('Failed to load debug log');
+
+        const text = await res.text();
+        if (!text.trim()) {
+          debugLogBody.innerHTML = '<div style="text-align: center; color: #64748b; padding: 2rem;">No debug entries yet.</div>';
+          return;
+        }
+
+        const entries = text.trim().split('\n').filter(line => line.trim()).map(line => {
+          try {
+            return JSON.parse(line);
+          } catch (e) {
+            return null;
+          }
+        }).filter(e => e !== null);
+
+        if (entries.length === 0) {
+          debugLogBody.innerHTML = '<div style="text-align: center; color: #64748b; padding: 2rem;">No debug entries yet.</div>';
+          return;
+        }
+
+        // Reverse to show newest first
+        entries.reverse();
+
+        debugLogBody.innerHTML = entries.map(entry => {
+          const date = new Date(entry.timestamp);
+          const formattedDate = date.toLocaleString();
+
+          return `
+            <div class="debug-log-entry">
+              <div class="debug-log-entry-header">
+                <div class="debug-log-timestamp">${formattedDate}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Question</div>
+                <div class="debug-log-section-content">${escapeHtml(entry.question || '')}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Answer</div>
+                <div class="debug-log-section-content">${escapeHtml(entry.answer || '')}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Intent (classifier output)</div>
+                <div class="debug-log-section-content">${escapeHtml(JSON.stringify(entry.intent, null, 2))}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Cypher (generated query)</div>
+                <div class="debug-log-section-content">${escapeHtml(entry.cypher || '–')}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">DB rows (graph query results)</div>
+                <div class="debug-log-section-content">${escapeHtml(JSON.stringify(entry.dbRows, null, 2))}</div>
+              </div>
+              
+              <div class="debug-log-section">
+                <div class="debug-log-section-title">Semantic hits (vector search)</div>
+                <div class="debug-log-section-content">${escapeHtml(JSON.stringify(entry.semanticHits, null, 2))}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Error loading debug log:', err);
+        debugLogBody.innerHTML = '<div style="text-align: center; color: #f97373; padding: 2rem;">Error loading debug log.</div>';
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    const cfgBtn = document.getElementById('cfgBtn');
+    cfgBtn.addEventListener('click', () => {
+      window.open('visualize_cfg.html', '_blank');
+    });
+
+    debugLogBtn.addEventListener('click', () => {
+      debugLogModal.classList.add('open');
+      loadDebugLog();
+    });
+
+    debugLogClose.addEventListener('click', () => {
+      debugLogModal.classList.remove('open');
+    });
+
+    // Close modal when clicking outside
+    debugLogModal.addEventListener('click', (e) => {
+      if (e.target === debugLogModal) {
+        debugLogModal.classList.remove('open');
+      }
+    });
+  </script>
 </body>
-</html>
 
+</html>

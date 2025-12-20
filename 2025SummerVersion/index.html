@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Research Database Query Interface</title>
+
+    <!--
+      ──────────────────────────────────────────────────────────────────────
+      GLOBAL STYLES
+      All colours and spacings are chosen to match the University palette
+      and to ensure AAA-grade contrast for accessibility.
+      Stakeholders: change only the hex codes below if branding updates.
+      ──────────────────────────────────────────────────────────────────────
+    -->
+    <style>
+        /* —— Page layout and typography —— */
+        body {
+            font-family: Arial, sans-serif;  /* Ubiquitous fallback font */
+            margin: 2rem;                    /* Comfortable white-space */
+            background-color: #ffffff;       /* White workspace */
+            color: #333;                     /* Dark-grey text for readability */
+        }
+
+        /* —— Header area with title + logo —— */
+        header {
+            position: relative;
+            text-align: left;
+            margin-bottom: 1rem;
+        }
+        header img {             /* University/Company logo */
+            position: absolute;
+            top: -40px;          /* Pops the logo slightly above title */
+            right: 0;
+            height: 90px;
+            width: auto;
+        }
+        h1 {
+            color: #1e6e37;      /* Institutional green */
+            margin-top: 0;
+        }
+
+        /* —— Chat transcript box —— */
+        #chat {
+            border: 2px solid #1e6e37;
+            padding: 1rem;
+            height: 60vh;          /* Occupies 60 % of viewport height */
+            overflow-y: auto;      /* Scroll when content exceeds height */
+            margin-bottom: 1rem;
+            background-color: #f9fff6; /* Very-light green background */
+            border-radius: 8px;
+        }
+        .message { margin-bottom: 0.5rem; }
+        .message.user      { text-align: right; color: #1e6e37; }
+        .message.assistant { text-align: left;  color: #a38b00; }
+
+        /* —— Input bar (text field + Send button) —— */
+        #input-container {
+            width: 600px;          /* Fixed width on desktops */
+            max-width: 90%;        /* Shrinks gracefully on mobiles */
+            margin: 0 auto 1rem;
+            display: flex;
+            gap: 10px;             /* Space between field and button */
+        }
+        #question {
+            flex-grow: 1;          /* Text field consumes remaining width */
+            height: 40px;
+            padding: 0 1rem;
+            border: 1px solid #1e6e37;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        #sendBtn {
+            width: 120px;
+            height: 40px;
+            background-color: #1e6e37;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        #sendBtn:hover { background-color: #154d26; }  /* Darker on hover */
+
+        /* —— Result formatting helpers —— */
+        pre {
+            background: #f4f4f4;
+            padding: 0.5rem;
+            overflow-x: auto;
+            border-radius: 4px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #e8f5e9;
+            color: #1e6e37;
+        }
+
+        /* —— Buttons shown when user must choose “shallow” vs “deep” —— */
+        .choice-buttons { margin: 10px 0; }
+        .choice-buttons button {
+            margin-right: 10px;
+            padding: 5px 15px;
+        }
+
+        /* —— Highlight box for AI-generated analysis summaries —— */
+        .analysis-summary {
+            background-color: #f0f7ff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #1e6e37;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <!--
+      ──────────────────────────────────────────────────────────────────────
+      TITLE & LOGO
+      Appears once at the top of the interface.
+      Stakeholders: Swap “el1.jpg” to update branding; keep dimensions.
+      ──────────────────────────────────────────────────────────────────────
+    -->
+    <header>
+        <h1>Research Database Query Interface</h1>
+        <img src="/el1.jpg" alt="Logo" />
+    </header>
+
+    <!-- Chat history container -->
+    <div id="chat"></div>
+
+    <!--
+      INPUT BAR
+      Users type questions here; the Send button triggers the back-end call.
+    -->
+    <div id="input-container">
+        <input type="text" id="question" placeholder="Enter your research question here..." />
+        <button id="sendBtn">Send</button>
+    </div>
+
+    <!--
+      ──────────────────────────────────────────────────────────────────────
+      JAVASCRIPT LOGIC
+      Handles in-browser state (chat history) and AJAX calls to /query.
+      Every function is documented with triple-slash comments (///) for clarity.
+      ──────────────────────────────────────────────────────────────────────
+    -->
+    <script>
+        /* ── Local state ─────────────────────────────────────────────── */
+        const history = [];                   // Chat history sent to Flask
+        const chatDiv = document.getElementById('chat');
+        const input   = document.getElementById('question');
+        const sendBtn = document.getElementById('sendBtn');
+
+        /// addMessage(role, text)
+        /// --------------------------------------------
+        /// Renders a single chat bubble in the #chat div.
+        /// Params:
+        ///   role — 'user' | 'assistant' (determines colour & alignment)
+        ///   text — HTML string to display inside the bubble
+        function addMessage(role, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role}`;
+            msgDiv.innerHTML = text;
+            chatDiv.appendChild(msgDiv);
+            // Auto-scroll so latest message is always visible
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+         // --- NEW: Render “people matches” with clickable names -----------------
+        function renderNameSuggestions(matches, originalQueryText) {
+        if (!matches || matches.length === 0) return;
+
+        const box = document.createElement('div');
+        box.className = 'analysis-summary';
+        let html = `<strong>People matching “${originalQueryText}”:</strong><br>`;
+        html += matches.map(m => 
+            `<button class="name-suggestion" data-name="${m.normalized_name}" title="${m.name}">
+                ${m.name}
+             </button>`
+        ).join(' ');
+        box.innerHTML = html;
+        chatDiv.appendChild(box);
+
+        box.querySelectorAll('.name-suggestion').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const norm = btn.getAttribute('data-name');
+                loadResearcherSummary(norm);
+            });
+        });
+    }
+
+     // --- NEW: Fetch and show a researcher’s quick profile ------------------
+    async function loadResearcherSummary(nameOrNorm) {
+        addMessage('assistant', '<em>Loading researcher profile...</em>');
+        try {
+            const res = await fetch('/researcher_summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: nameOrNorm })
+            });
+            const data = await res.json();
+            chatDiv.lastChild.remove();
+
+            if (res.ok && data.response_type === 'researcher_summary') {
+                renderResearcherSummary(data);
+            } else {
+                addMessage('assistant', `<span style="color:red;">${data.error || 'Could not load profile.'}</span>`);
+            }
+        } catch (e) {
+            chatDiv.lastChild.remove();
+            addMessage('assistant', `<span style="color:red;">${e.message}</span>`);
+        }
+    }
+      function renderTable(rows) {
+        if (!rows || rows.length === 0) return '<em>No data.</em>';
+        const cols = Object.keys(rows[0]);
+        let html = '<table><tr>';
+        cols.forEach(c => html += `<th>${c}</th>`);
+        html += '</tr>';
+        rows.forEach(r => {
+            html += '<tr>';
+            cols.forEach(c => {
+                const v = r[c];
+                html += `<td>${Array.isArray(v) ? v.join(', ') : (v ?? '')}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</table>';
+        return html;
+    }
+
+    function renderResearcherSummary(data) {
+        const { researcher, stats, coauthors, keywords, tags, publications } = data;
+
+        addMessage('assistant', `
+            <div class="analysis-summary">
+                <h3 style="margin:0 0 .5rem 0;">${researcher}</h3>
+                <div><strong>Publications:</strong> ${stats.publications} ${
+                    stats.first_year ? `(${stats.first_year}–${stats.latest_year})` : ''}</div>
+                <hr>
+                <div><strong>Top Co-authors</strong></div>
+                ${renderTable(coauthors)}
+                <br>
+                <div><strong>Keywords</strong></div>
+                ${renderTable(keywords)}
+                <br>
+                <div><strong>Tags</strong></div>
+                ${renderTable(tags)}
+                <br>
+                <div><strong>Latest Publications (up to 20)</strong></div>
+                ${renderTable(publications)}
+            </div>
+        `);
+    }
+
+     // --- NEW: Ask backend for partial-name matches in parallel -------------
+    async function searchNameSuggestions(text) {
+        try {
+            const res = await fetch('/search_researchers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ q: text })
+            });
+            const data = await res.json();
+            if (data.matches && data.matches.length) {
+                renderNameSuggestions(data.matches, text);
+            }
+        } catch {
+            /* non-fatal; ignore */
+        }
+    }
+
+        /// sendQuery()
+        /// --------------------------------------------
+        /// Core workflow triggered by Send button or Enter key:
+        ///  1. Push user input into history.
+        ///  2. POST history to /query (Flask back-end).
+        ///  3. Handle three possible reply types:
+        ///       • choice_request  – ask user “shallow or deep?”
+        ///       • fallback_deep   – automatic second call using deep analysis
+        ///       • normal results  – tables / Cypher / analysis
+        async function sendQuery() {
+            const question = input.value.trim();
+
+            // Detect if user just clicked “shallow” / “deep” (no new text)
+            // replace your isControl computation with:
+            const isControl =
+            history.length > 0 &&
+            (
+                ['shallow', 'deep'].includes(history[history.length - 1].content.toLowerCase())
+                || history[history.length - 1].content.toLowerCase().startsWith('select_researcher:')
+            );
+
+
+            if (!question && !isControl) return;  // Ignore blank submits
+
+            // Echo user message in chat
+            if (question) {
+                addMessage('user', question);
+                history.push({ role: 'user', content: question });
+                input.value = '';
+            }
+
+            // Placeholder while waiting for Flask
+            addMessage('assistant', '<em>Processing your query...</em>');
+
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ history })
+                });
+
+                const raw = await response.text();   // May or may not be JSON
+                let data;
+                try { data = JSON.parse(raw); }
+                catch (e) {
+                    // Show raw response for easier debugging
+                    chatDiv.lastChild.remove();
+                    addMessage(
+                        'assistant',
+                        `<span style="color:red;">Server did not return JSON (showing first 800 chars):</span><br><pre>${raw.slice(0, 800)}</pre>`
+                    );
+                    return;
+                }
+                chatDiv.lastChild.remove();  // Remove “processing…”
+
+                /* —— 1) User must choose shallow vs deep —— */
+                if (data.response_type === 'choice_request') {
+                    addMessage('assistant', data.message);
+
+                    // Inline buttons that push a control word into history
+                    const choiceDiv = document.createElement('div');
+                    choiceDiv.className = 'choice-buttons';
+                    choiceDiv.innerHTML = `
+                        <button id="shallowBtn">Shallow Analysis</button>
+                        <button id="deepBtn">Deep Analysis</button>
+                    `;
+                    chatDiv.appendChild(choiceDiv);
+
+                    document.getElementById('shallowBtn').addEventListener('click', () => {
+                        history.push({ role: 'user', content: 'shallow' });
+box.querySelectorAll('.name-suggestion').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const norm = btn.getAttribute('data-norm');
+
+    // Build the *full* history we intend to send (do not rely on sendQuery’s internals)
+    const fullHistory = [
+      ...history,
+      { role: 'user', content: `select_researcher:${norm}` }
+    ];
+
+    // Optional: echo a small “selected” note in the chat
+    addMessage('user', `(selected) ${btn.title || btn.textContent}`);
+
+    // Show a temporary “processing” message
+    addMessage('assistant', '<em>Processing your selection...</em>');
+
+    try {
+      const res = await fetch('/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ history: fullHistory }) // ← key line
+      });
+      const raw = await res.text();
+      chatDiv.lastChild.remove(); // remove “processing”
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        addMessage('assistant',
+          `<span style="color:red;">Server did not return JSON (first 800):</span><br><pre>${raw.slice(0,800)}</pre>`);
+        return;
+      }
+
+      // Keep the in-memory history in sync *after* a successful round-trip
+      history.push({ role: 'user', content: `select_researcher:${norm}` });
+
+      // Reuse your existing renderer
+      processResponse(data);
+    } catch (err) {
+      chatDiv.lastChild.remove();
+      addMessage('assistant', `<span style="color:red;">${err.message}</span>`);
+    }
+  });
+});
+                        sendQuery();  // Re-trigger with choice
+                    });
+                    document.getElementById('deepBtn').addEventListener('click', () => {
+                        history.push({ role: 'user', content: 'deep' });
+                        sendQuery();
+                    });
+                    return;   // Wait for user click
+                }
+                
+                /* ── Researcher disambiguation (partial name match) ───────────── */
+                if (data.response_type === 'researcher_disambiguation') {
+                const box = document.createElement('div');
+                box.className = 'analysis-summary';
+                const listHTML = (data.candidates || []).map(c =>
+                    `<button class="name-suggestion" data-norm="${c.normalized_name}" title="${c.name}">
+                    ${c.name}
+                    </button>`
+                ).join(' ');
+                box.innerHTML = `<strong>${data.message}</strong><br>${listHTML}`;
+                chatDiv.appendChild(box);
+
+                box.querySelectorAll('.name-suggestion').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                    const norm = btn.getAttribute('data-norm');
+                    // push control message and re-send (no text input needed)
+                    history.push({ role: 'user', content: `select_researcher:${norm}` });
+                    sendQuery();
+                    });
+                });
+                return;
+                }
+
+                /* —— 2) Back-end auto-decided to go “deep” —— */
+                if (data.response_type === 'fallback_deep') {
+                    const fallbackResponse = await fetch('/query', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            history: [...history, { role: 'user', content: 'deep' }]
+                        })
+                    });
+                    const fallbackData = await fallbackResponse.json();
+                    processResponse(fallbackData);
+                    return;
+                }
+
+                /* —— 3) Regular result payload —— */
+                processResponse(data);
+
+            } catch (error) {
+                chatDiv.lastChild.remove();
+                addMessage(
+                    'assistant',
+                    `<span style="color:red;">Error: ${error.message}</span>`
+                );
+            }
+        }
+
+        /// processResponse(data)
+        /// --------------------------------------------
+        /// Takes a JSON payload from the back-end and renders:
+        ///   • Cypher preview (for tech audiences)
+        ///   • Data table (if rows returned)
+        ///   • Plain-English analysis summary
+        ///   • “No results” fallback
+        function processResponse(data) {
+            let displayed = false;
+
+            // 1) Show Cypher query (transparent, builds trust with tech teams)
+            if (data.cypher_query) {
+                addMessage('assistant',
+                    `<strong>Cypher Query:</strong><br><pre>${data.cypher_query}</pre>`);
+            }
+
+            // 2) Render tabular results, collapsible for readability
+            if (data.results && data.results.length > 0) {
+                const cols = Object.keys(data.results[0]);
+                let tableId = 'resultTable_' + Date.now();
+                let tableHTML = `
+                    <button onclick="toggleTable('${tableId}')">Expand/Collapse Table</button>
+                    <div id="${tableId}" style="display:none;">
+                        <table><tr>
+                `;
+                cols.forEach(col => tableHTML += `<th>${col}</th>`);
+                tableHTML += '</tr>';
+                data.results.forEach(row => {
+                    tableHTML += '<tr>';
+                    cols.forEach(col => {
+                        const value = row[col] || '';
+                        tableHTML += `<td>${Array.isArray(value) ? value.join(', ') : value}</td>`;
+                    });
+                    tableHTML += '</tr>';
+                });
+                tableHTML += '</table></div>';
+                addMessage('assistant', tableHTML);
+                displayed = true;
+            }
+
+            // 3) Show narrative analysis (AI summarisation layer)
+            if (data.analysis) {
+                const analysisDiv = document.createElement('div');
+                analysisDiv.className = 'analysis-summary';
+                analysisDiv.innerHTML = `<strong>${
+                    data.response_type === 'trend_analysis'
+                        ? 'Trend Analysis Results:'
+                        : 'Topic Analysis:'
+                }</strong><br>${data.analysis}`;
+                chatDiv.appendChild(analysisDiv);
+                displayed = true;
+            }
+
+            // 4) Graceful fallback if nothing came back
+            if (!displayed) {
+                addMessage('assistant', '<em>No results found for this query.</em>');
+            }
+        }
+
+        /// toggleTable(id)
+        /// --------------------------------------------
+        /// Simple utility to collapse / expand long result tables.
+        function toggleTable(id) {
+            const el = document.getElementById(id);
+            el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        }
+
+        /* ── Event listeners ─────────────────────────────────────────── */
+        sendBtn.addEventListener('click', sendQuery);
+        input.addEventListener('keypress', e => { if (e.key === 'Enter') sendQuery(); });
+    </script>
+    
+    <style>
+    /* small pill buttons for name suggestions */
+    .name-suggestion {
+        display: inline-block;
+        margin: 6px 6px 0 0;
+        padding: 6px 12px;
+        border: 1px solid #1e6e37;
+        background: #fff;
+        color: #1e6e37;
+        border-radius: 999px;
+        cursor: pointer;
+    }
+    .name-suggestion:hover { background: #e8f5e9; }
+    </style>
+</body>
+</html>
+

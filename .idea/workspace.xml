@@ -5,24 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c5be18bb-343b-40f0-b694-aa745c71f72c" name="Changes" comment="Still having the right publications.csv">
-      <change afterPath="$PROJECT_DIR$/HNSWExperiment/.env" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/HNSWExperiment/app.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/HNSWExperiment/index.html" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/HNSWExperiment/prompts/answer_prompt.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/HNSWExperiment/prompts/cypher_prompt.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/HNSWExperiment/prompts/intent_prompt.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/HNSWExperiment/tryGPT5_v2.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/infocsv/author_institution.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/infocsv/authorship.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/infocsv/coauthor_relationships.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/infocsv/institutions.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/infocsv/publication_venue.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/infocsv/publications.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/infocsv/researchers_openalex.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/infocsv/venues.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/openAlexLib/clean_pub.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/openAlexLib/first3rowsGetter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/openAlexLib/superDBmaker.py" beforeDir="false" afterPath="$PROJECT_DIR$/openAlexLib/superDBmaker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HNSWExperiment/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/HNSWExperiment/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HNSWExperiment/test_fuzzy_search.py" beforeDir="false" afterPath="$PROJECT_DIR$/HNSWExperiment/test_fuzzy_search.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/HNSWExperiment/tryGPT5_v2.py" beforeDir="false" afterPath="$PROJECT_DIR$/HNSWExperiment/tryGPT5_v2.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/superDBmaker.py" beforeDir="false" afterPath="$PROJECT_DIR$/superDBmaker.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -60,35 +47,36 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "DefaultHtmlFileTemplate": "HTML File",
-    "Flask server.Flask (HNSWExperiment/app.py).executor": "Run",
-    "Flask server.Flask (app.py).executor": "Run",
-    "Python.CSV.executor": "Run",
-    "Python.Neo4j-webpageGPT5.executor": "Run",
-    "Python.cleanPub.executor": "Run",
-    "Python.dbMaker.executor": "Run",
-    "Python.smallGetter.executor": "Run",
-    "Python.superDBmaker.executor": "Run",
-    "Python.tryGPT5_v2.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
-    "git-widget-placeholder": "main",
-    "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "/Users/jookenblue/PycharmProjects/Neo4j-webpageGPT5/HNSWExperiment",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "to.speed.mode.migration.done": "true",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;DefaultHtmlFileTemplate&quot;: &quot;HTML File&quot;,
+    &quot;Flask server.Flask (HNSWExperiment/app.py).executor&quot;: &quot;Run&quot;,
+    &quot;Flask server.Flask (app.py).executor&quot;: &quot;Run&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python.CSV.executor&quot;: &quot;Run&quot;,
+    &quot;Python.Neo4j-webpageGPT5.executor&quot;: &quot;Run&quot;,
+    &quot;Python.cleanPub.executor&quot;: &quot;Run&quot;,
+    &quot;Python.dbMaker.executor&quot;: &quot;Run&quot;,
+    &quot;Python.smallGetter.executor&quot;: &quot;Run&quot;,
+    &quot;Python.superDBmaker.executor&quot;: &quot;Run&quot;,
+    &quot;Python.tryGPT5_v2.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/jookenblue/PycharmProjects/Neo4j-webpageGPT5/HNSWExperiment&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/HNSWExperiment" />
@@ -100,7 +88,7 @@
       <recent name="$PROJECT_DIR$/HNSWExperiment" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python.smallGetter">
     <configuration name="CSV" type="PythonConfigurationType" factoryName="Python">
       <module name="Neo4j-webpageGPT5" />
       <option name="ENV_FILES" value="" />
@@ -207,7 +195,6 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-3aa1da707db6-JavaScript-PY-252.27397.106" />
         <option value="bundled-python-sdk-4e2b1448bda8-9a97661f3031-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.27397.106" />
       </set>
     </attachedChunks>

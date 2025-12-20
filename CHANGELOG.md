@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Strict Logic Parity**: Realigned the backend code to perfectly match the original scientific discovery logic from the production version.
 - **Improved Author Discovery**: Re-implemented the dynamic LLM-driven Cypher generation for better semantic search results.
 
-## [2.1.0] - 2024-12-18
+## [2.1.0] - 2025-12-18
 ### Added
 - **Double Layer LLMs (Speculative Synthesis)**: Integrated parallel LLM calls to significantly reduce response latency.
 - **Fuzzy Search Fallback**: Implemented Neo4j full-text indexes to handle typos and partial names in author resolution.
@@ -23,12 +23,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - **Re-constructed UI**: Modernized the web interface with improved chat bubbles, debug panels, and responsiveness.
 
-## [2.0.0] - 2024-Fall
+## [2.0.0] - 2025-Fall
 ### Added
 - **Semantic Search**: Integrated OpenAI embeddings and Neo4j vector search to support topic-based queries.
 - **Vector Indexing**: Built HNSW-based vector indexes for research publication abstracts.
 
-## [1.0.0] - 2024-Summer-End
+## [1.0.0] - 2025-Summer-End
 ### Added
 - **Initial Prototype**: Basic Q&A system using hardcoded Cypher templates and exact author name matching.
 - **Flask Backend**: Standard synchronous API for research discovery.
