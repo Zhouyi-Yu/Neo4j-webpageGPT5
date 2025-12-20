@@ -1,5 +1,7 @@
 # Neo4j Research Q&A System
 
+[**Changelog**](CHANGELOG.md)
+
 A high-performance, LLM-driven research discovery engine for the University of Alberta, powered by **FastAPI**, **Neo4j**, and **OpenAI**.
 
 ## 🚀 System Architecture
