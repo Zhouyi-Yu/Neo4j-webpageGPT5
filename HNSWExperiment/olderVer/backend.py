@@ -1,5 +1,5 @@
 """
-tryGPT5_v2.py  —  new multi-stage LLM wiring (FASTAPI ASYNC VERSION)
+tryGPT5_v2.py  —  new multi-stage LLM wiring
 
 Pipeline:
   1) classify_intent(question)  -> JSON
@@ -16,17 +16,15 @@ import os
 from typing import Any, Dict, List, Optional, Set, Union
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
-from neo4j import AsyncGraphDatabase
-import asyncio
+from openai import OpenAI
+from neo4j import GraphDatabase
 
 # ───────────────────────────────────────────────────────────────
 # LOAD ENV (.env in this folder)
 # ───────────────────────────────────────────────────────────────
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Use override=True and explicit strip to ensure .env takes precedence
-load_dotenv(os.path.join(BASE_DIR, ".env"), override=True)
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=False)
 
 # ───────────────────────────────────────────────────────────────
 # PROMPT LOADER
@@ -72,10 +70,10 @@ Example 3: "who is witold pedrycz" -> Witold Pedrycz
 # CONFIGURATION
 # ───────────────────────────────────────────────────────────────
 
-OPENAI_MODEL_CHAT = "gpt-4o-mini"                     # gpt-5-mini is not available, using standard chat model
+OPENAI_MODEL_CHAT = "gpt-5-mini"                     # pick your preferred chat model
 OPENAI_MODEL_EMBED = "text-embedding-3-large"     # embedding model
 
-# Neo4j connection
+# Neo4j connection (still hard-coded for now; you can env-ify later)
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
@@ -146,21 +144,29 @@ def normalize_intent(intent_obj: Dict[str, Any]) -> Dict[str, Any]:
     normalized["department"] = _normalize_department_value(intent_obj.get("department"))
     return normalized
 
-# Async OpenAI client
-api_key = os.getenv("OPENAI_API_KEY", "").strip()
-client = AsyncOpenAI(api_key=api_key)
+# OpenAI client reads OPENAI_API_KEY from env automatically
+client = OpenAI()
 
-# Async Neo4j driver
-driver = AsyncGraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+# Neo4j driver
+driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
 # ───────────────────────────────────────────────────────────────
 # LLM HELPER
 # ───────────────────────────────────────────────────────────────
 
-async def call_llm(system_prompt: str, user_content: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
+def call_llm(system_prompt: str, user_content: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
     """
-    LLM call using the Chat Completions API with optional conversation history.
-    Restored logic parity with olderVer but using Async and ChatCompletions.
+    LLM call using the Responses API with optional conversation history.
+
+    Args:
+        system_prompt: System instructions
+        user_content: Current user message
+        conversation_history: Optional list of previous exchanges, each dict with 'role' and 'content'
+
+    We ignore 'reasoning' items and extract text from the first 'message' item:
+      - item.type == "message"
+      - item.content[*].type == "output_text"
+      - part.text can be either a plain string or an object with .value
     """
     # Build input messages: system + history + current user message
     messages = [{"role": "system", "content": system_prompt}]
@@ -174,14 +180,28 @@ async def call_llm(system_prompt: str, user_content: str, conversation_history: 
     # Add current user message
     messages.append({"role": "user", "content": user_content})
     
-    resp = await client.chat.completions.create(
+    resp = client.responses.create(
         model=OPENAI_MODEL_CHAT,
-        messages=messages,
+        input=messages,
     )
 
-    content = resp.choices[0].message.content
-    if content:
-        return content.strip()
+    for item in resp.output:
+        if getattr(item, "type", None) == "message":
+            text_chunks: List[str] = []
+            for part in getattr(item, "content", []):
+                if getattr(part, "type", None) == "output_text":
+                    txt = getattr(part, "text", None)
+                    # txt can be a plain string or an object with .value
+                    if isinstance(txt, str):
+                        text_chunks.append(txt)
+                    elif txt is not None:
+                        val = getattr(txt, "value", None)
+                        if val is None and isinstance(txt, dict):
+                            val = txt.get("value")
+                        if isinstance(val, str):
+                            text_chunks.append(val)
+            if text_chunks:
+                return "".join(text_chunks).strip()
 
     # If we got here, something is wrong with the response shape
     raise RuntimeError("LLM response had no message text output")
@@ -192,8 +212,8 @@ async def call_llm(system_prompt: str, user_content: str, conversation_history: 
 # STEP 1: INTENT CLASSIFICATION
 # ───────────────────────────────────────────────────────────────
 
-async def classify_intent(question: str) -> Dict[str, Any]:
-    raw = await call_llm(INTENT_SYSTEM_PROMPT, question)
+def classify_intent(question: str) -> Dict[str, Any]:
+    raw = call_llm(INTENT_SYSTEM_PROMPT, question)
     try:
         obj = json.loads(raw)
     except json.JSONDecodeError:
@@ -221,21 +241,20 @@ async def classify_intent(question: str) -> Dict[str, Any]:
 # STEP 2: CYPHER GENERATION
 # ───────────────────────────────────────────────────────────────
 
-async def generate_cypher(intent_obj: Dict[str, Any]) -> str:
+def generate_cypher(intent_obj: Dict[str, Any]) -> str:
     """
     Send the full intent (including fields like authorUserId)
     to the Cypher-generator model.
     """
     cypher_context = intent_obj  # includes authorUserId if resolve_author set it
     user_content = json.dumps(cypher_context, ensure_ascii=False)
-    cypher = await call_llm(CYPHER_SYSTEM_PROMPT, user_content)
+    cypher = call_llm(CYPHER_SYSTEM_PROMPT, user_content)
     return cypher.strip()
 
 
-async def generate_author_cypher(semantic_hits: List[Dict[str, Any]]) -> str:
+def generate_author_cypher(semantic_hits: List[Dict[str, Any]]) -> str:
     """
     Generate Cypher to find authors for the given semantic hits.
-    RESTORED: Using LLM to generate Cypher as in olderVer.
     """
     titles = [hit.get("title") for hit in semantic_hits if hit.get("title")]
     if not titles:
@@ -244,7 +263,7 @@ async def generate_author_cypher(semantic_hits: List[Dict[str, Any]]) -> str:
     # Pass the titles context to the LLM so it understands what we are looking for,
     # even though the prompt instructs to use the $titles parameter.
     user_content = f"Here is the list of titles to find authors for: {json.dumps(titles)}"
-    cypher = await call_llm(AUTHOR_DISCOVERY_PROMPT, user_content)
+    cypher = call_llm(AUTHOR_DISCOVERY_PROMPT, user_content)
     
     # Clean up markdown code blocks if present
     cypher = cypher.replace("```cypher", "").replace("```", "").strip()
@@ -256,15 +275,14 @@ async def generate_author_cypher(semantic_hits: List[Dict[str, Any]]) -> str:
 # NEO4J HELPERS
 # ───────────────────────────────────────────────────────────────
 
-async def run_cypher(cypher: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def run_cypher(cypher: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     params = params or {}
-    async with driver.session() as session:
-        result = await session.run(cypher, **params)
-        records = await result.data()
-        return records
+    with driver.session() as session:
+        result = session.run(cypher, **params)
+        return [dict(r) for r in result]
 
 
-async def recursive_semantic_answer(
+def recursive_semantic_answer(
     question: str,
     semantic_hits: List[Dict[str, Any]],
     first_pass_summary: str,
@@ -278,14 +296,13 @@ async def recursive_semantic_answer(
         "first_pass_summary": first_pass_summary,
     }
     user_content = json.dumps(payload, ensure_ascii=False)
-    return await call_llm(SEMANTIC_REASK_PROMPT, user_content)
-
-async def resolve_author(intent_obj: Dict[str, Any]):
+    return call_llm(SEMANTIC_REASK_PROMPT, user_content)
+def resolve_author(intent_obj: Dict[str, Any]):
     author_name = (intent_obj or {}).get("author")
     if not author_name:
         return intent_obj, None
 
-    async with driver.session() as session:
+    with driver.session() as session:
         # Step 1: Exact Match (Case-Insensitive)
         exact_cypher = """
         MATCH (r:Researcher)
@@ -295,8 +312,7 @@ async def resolve_author(intent_obj: Dict[str, Any]):
         ORDER BY r.name DESC
         LIMIT 1
         """
-        result = await session.run(exact_cypher, name=author_name)
-        exact_result = await result.single()
+        exact_result = session.run(exact_cypher, name=author_name).single()
         
         if exact_result:
             # Exact match found - auto-select
@@ -330,8 +346,7 @@ async def resolve_author(intent_obj: Dict[str, Any]):
         ORDER BY score DESC
         LIMIT 5
         """
-        result = await session.run(fuzzy_cypher, term=fuzzy_name_query)
-        rows = await result.data()
+        rows = [dict(r) for r in session.run(fuzzy_cypher, term=fuzzy_name_query)]
 
         # If fuzzy returns matches, treat them as candidates
         if rows:
@@ -346,19 +361,19 @@ async def resolve_author(intent_obj: Dict[str, Any]):
 # SEMANTIC SEARCH (VECTOR INDEX)
 # ───────────────────────────────────────────────────────────────
 
-async def get_embedding(text: str) -> List[float]:
+def get_embedding(text: str) -> List[float]:
     """
     Get an embedding vector for the topic string.
     """
     if not text:
         return []
-    resp = await client.embeddings.create(
+    resp = client.embeddings.create(
         model=OPENAI_MODEL_EMBED,
         input=text,
     )
     return resp.data[0].embedding  # type: ignore[attr-defined]
 
-async def semantic_search_publications(topic: Optional[str], k: int = 200) -> List[Dict[str, Any]]:
+def semantic_search_publications(topic: Optional[str], k: int = 200) -> List[Dict[str, Any]]:
     """
     Use Neo4j vector index on Publication.embedding.
     Assumes VECTOR_INDEX_NAME exists on :Publication(embedding).
@@ -368,7 +383,7 @@ async def semantic_search_publications(topic: Optional[str], k: int = 200) -> Li
     if not topic:
         return []
 
-    embedding = await get_embedding(topic)
+    embedding = get_embedding(topic)
     if not embedding:
         return []
 
@@ -383,10 +398,9 @@ async def semantic_search_publications(topic: Optional[str], k: int = 200) -> Li
     """
 
     try:
-        async with driver.session() as session:
-            result = await session.run(cypher, k=k, embedding=embedding)
-            records = await result.data()
-            return records
+        with driver.session() as session:
+            result = session.run(cypher, k=k, embedding=embedding)
+            return [dict(r) for r in result]
     except Exception as e:
         # Don't turn vector-index issues into HTTP 500s.
         # They will still show up in your Flask logs.
@@ -394,7 +408,7 @@ async def semantic_search_publications(topic: Optional[str], k: int = 200) -> Li
         return []
 
 
-async def semantic_search_uofa(question_text: str, k: int = 20) -> List[Dict[str, Any]]:
+def semantic_search_uofa(question_text: str, k: int = 20) -> List[Dict[str, Any]]:
     """
     Fallback semantic search that only returns publications authored by
     University of Alberta people (detected via Person nodes with ccid/userId).
@@ -403,7 +417,7 @@ async def semantic_search_uofa(question_text: str, k: int = 20) -> List[Dict[str
     if not question_text:
         return []
 
-    embedding = await get_embedding(question_text)
+    embedding = get_embedding(question_text)
     if not embedding:
         return []
 
@@ -426,10 +440,9 @@ async def semantic_search_uofa(question_text: str, k: int = 20) -> List[Dict[str
     """
 
     try:
-        async with driver.session() as session:
-            result = await session.run(cypher, k=k, embedding=embedding)
-            records = await result.data()
-            return records
+        with driver.session() as session:
+            result = session.run(cypher, k=k, embedding=embedding)
+            return [dict(r) for r in result]
     except Exception as e:
         print(f"[semantic_search_uofa] Error during vector query: {e}")
         return []
@@ -467,7 +480,7 @@ def _sanitize_payload(data: Union[Dict, List], max_items: int = 15, max_text_len
     
     return data
 
-async def synthesize_answer(
+def synthesize_answer(
     question: str,
     intent_obj: Dict[str, Any],
     cypher: str,
@@ -483,11 +496,11 @@ async def synthesize_answer(
         "semantic_hits": _sanitize_payload(semantic_hits),
     }
     user_content = json.dumps(payload, ensure_ascii=False)
-    answer = await call_llm(ANSWER_SYSTEM_PROMPT, user_content, conversation_history)
+    answer = call_llm(ANSWER_SYSTEM_PROMPT, user_content, conversation_history)
     return answer.strip()
 
 
-async def synthesize_final_author_answer(
+def synthesize_final_author_answer(
     question: str,
     semantic_hits: List[Dict[str, Any]],
     author_rows: List[Dict[str, Any]],
@@ -499,7 +512,7 @@ async def synthesize_final_author_answer(
         "author_data": _sanitize_payload(author_rows),
     }
     user_content = json.dumps(payload, ensure_ascii=False)
-    return (await call_llm(FINAL_AUTHOR_ANSWER_PROMPT, user_content, conversation_history)).strip()
+    return call_llm(FINAL_AUTHOR_ANSWER_PROMPT, user_content, conversation_history).strip()
 
 
 # ───────────────────────────────────────────────────────────────
@@ -553,30 +566,45 @@ def has_required_slots(intent_obj: Dict[str, Any]) -> bool:
             return False
     return True
 
-async def answer_question(question: str, conversation_history: Optional[List[Dict[str, str]]] = None, selected_user_id: Optional[str] = None) -> Dict[str, Any]:
+def answer_question(question: str, conversation_history: Optional[List[Dict[str, str]]] = None, selected_user_id: Optional[str] = None) -> Dict[str, Any]:
     """
-    Full pipeline (ASYNC VERSION): Matches the exact logic and flow of olderVer/backend.py.
+    Full pipeline:
+      1) classify intent
+      2) resolve author name (disambiguation / candidate listing)
+      3) generate cypher
+      4) run cypher
+      5) run semantic search if needed
+      6) synthesize final answer
+
+    Args:
+        question: The user's question
+        conversation_history: Optional list of previous exchanges (each dict with 'role' and 'content')
+        selected_user_id: Optional userId from candidate selection (bypasses author resolution)
+
+    Returns a dict suitable for jsonify in Flask.
     """
-    # ~~~ STEP 0: INTENT CLASSIFICATION ~~~
-    intent_obj = await classify_intent(question)
+    intent_obj = classify_intent(question)
     intent_obj = normalize_intent(intent_obj)
 
     # ~~~ STEP 0: HANDLE DIRECT USER SELECTION ~~~
-    # If selected_user_id is provided, or leaked Event object
-    if selected_user_id and isinstance(selected_user_id, str):
+    # If selected_user_id is provided, skip author resolution entirely
+    if selected_user_id:
         intent_obj["authorUserId"] = selected_user_id
         # Promote to author query if it was generic
         if intent_obj.get("intent") == "OPEN_QUESTION":
             intent_obj["intent"] = "AUTHOR_MAIN_RESEARCH_AREAS"
 
     # ~~~ STEP 1: AUTHOR RESOLUTION & INTENT PROMOTION ~~~
+    # We try to resolve the author strictly before deciding on the flow.
+    # This ensures that if we identify "Alan Wilman", we use the graph query even if the LLM said "OPEN_QUESTION".
+
     author_to_check = intent_obj.get("author")
     
     # If classifier didn't find specific author, try forceful extraction
     if not author_to_check:
         try:
             # We only try extraction if the question is short-ish or likely to contain a name.
-            extracted = (await call_llm(NAME_EXTRACTION_PROMPT, question)).strip()
+            extracted = call_llm(NAME_EXTRACTION_PROMPT, question).strip()
             # Sanity: ignore common false positives
             if extracted and len(extracted) > 3: 
                 author_to_check = extracted
@@ -588,7 +616,7 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
         temp_intent = dict(intent_obj)
         temp_intent["author"] = author_to_check
         
-        updated_intent, candidates = await resolve_author(temp_intent)
+        updated_intent, candidates = resolve_author(temp_intent)
         
         # A) Multiple Candidates Found -> Return immediately
         if candidates and len(candidates) > 1:
@@ -620,20 +648,20 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
     # We take this if it's a known template AND we have the request slots (e.g. Author)
     if is_template_intent(intent_obj) and has_required_slots(intent_obj):
         
-        cypher = await generate_cypher(intent_obj)
-        db_rows = await run_cypher(cypher)
+        cypher = generate_cypher(intent_obj)
+        db_rows = run_cypher(cypher)
 
         if intent_obj.get("intent") in TOPIC_INTENTS:
-            semantic_hits = await semantic_search_publications(intent_obj.get("topic"))
+            semantic_hits = semantic_search_publications(intent_obj.get("topic"))
         else:
             semantic_hits = []
 
         # Fallback: if structured query returned nothing, try UAlberta semantic fallback
         if not db_rows and not semantic_hits:
-            semantic_hits = await semantic_search_uofa(question)
+            semantic_hits = semantic_search_uofa(question)
 
         # Synthesize
-        answer_text = await synthesize_answer(
+        answer_text = synthesize_answer(
             question=question,
             intent_obj=intent_obj,
             cypher=cypher,
@@ -644,7 +672,7 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
         
         # Second-pass if needed
         if not db_rows and semantic_hits:
-             answer_text = await recursive_semantic_answer(question, semantic_hits, answer_text)
+             answer_text = recursive_semantic_answer(question, semantic_hits, answer_text)
 
         return {
             "answer": answer_text,
@@ -658,7 +686,7 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
     # For open questions, or template intents where we missed a slot (e.g. unknown author)
     else:
         # 1. Semantic Search (UAlberta authors only, limited fields)
-        semantic_hits = await semantic_search_uofa(question)
+        semantic_hits = semantic_search_uofa(question)
         
         if not semantic_hits:
             return {
@@ -670,18 +698,18 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
             }
 
         # 2. Generate Cypher to find authors for these specific publications
-        author_cypher = await generate_author_cypher(semantic_hits)
+        author_cypher = generate_author_cypher(semantic_hits)
         
         # 3. Run Cypher (passing titles as parameter)
         titles = [hit.get("title") for hit in semantic_hits if hit.get("title")]
         try:
-            author_rows = await run_cypher(author_cypher, params={"titles": titles})
+            author_rows = run_cypher(author_cypher, params={"titles": titles})
         except Exception as e:
             print(f"Error running author discovery cypher: {e}")
             author_rows = []
 
         # 4. Synthesize Final Answer
-        final_answer = await synthesize_final_author_answer(question, semantic_hits, author_rows, conversation_history)
+        final_answer = synthesize_final_author_answer(question, semantic_hits, author_rows, conversation_history)
 
         return {
             "answer": final_answer,
@@ -696,14 +724,11 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
 # ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    async def main():
-        q = input("Ask a question about UAlberta research: ")
-        result = await answer_question(q)
-        print("\n=== Answer ===")
-        print(result["answer"])
-        print("\n=== Intent ===")
-        print(json.dumps(result["intent"], indent=2))
-        print("\n=== Cypher ===")
-        print(result["cypher"])
-    
-    asyncio.run(main())
+    q = input("Ask a question about UAlberta research: ")
+    result = answer_question(q)
+    print("\n=== Answer ===")
+    print(result["answer"])
+    print("\n=== Intent ===")
+    print(json.dumps(result["intent"], indent=2))
+    print("\n=== Cypher ===")
+    print(result["cypher"])

@@ -48,8 +48,6 @@ def root():
     return send_from_directory(BASE_DIR, "index.html")
 
 
-import asyncio
-
 @app.route("/api/query", methods=["POST"])
 def api_query():
     """
@@ -70,8 +68,7 @@ def api_query():
         conversation_history = session.get("conversation_history", [])
         
         # Call backend with history and optional selected_user_id
-        # Bridge sync Flask to async backend
-        result = asyncio.run(answer_question(question, conversation_history, selected_user_id))
+        result = answer_question(question, conversation_history, selected_user_id)
         
         # Update conversation history with this Q&A pair
         # Add user question

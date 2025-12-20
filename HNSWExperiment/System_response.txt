@@ -146,8 +146,10 @@ Control / Systems / Engineering theory / Misc:
 Fraser Forbes (control/relative gain array discussions; errata).
 Next step: I can now fetch direct URLs/DOI pages and open‑access PDFs where available for each listed title. Tell me which link type you prefer (DOI/publisher pages or open PDF when available), and I’ll return the URLs.
 
+U2.1:
 Publisher/DOI links please
 
+L2.1:
 Short answer: the provided metadata does not include publisher names or DOIs for the listed records, so I cannot supply direct publisher/DOI links from the data you gave. I can, if you’d like, look up DOIs and publisher links for each title and return them. Please confirm and I’ll retrieve them.
 
 Below I summarize the authors found in your Author Data, link them to the matched publications (from your semantic hits), describe their apparent focus based on the publication titles, and group authors by approach.

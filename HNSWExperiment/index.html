@@ -752,6 +752,10 @@
             <button id="askBtn">
               <span id="askBtnLabel">Send</span>
             </button>
+            <button id="stopBtn"
+              style="display: none; background: #f97373; box-shadow: 0 10px 20px rgba(249, 115, 115, 0.35);">
+              <span>Stop</span>
+            </button>
           </div>
         </div>
       </div>
@@ -936,6 +940,9 @@
       return container;
     }
 
+    // AbortController for Stopping Thinking
+    let abortController = null;
+
     // Helper function to ask question with userId
     async function askQuestionWithUserId(userId) {
       await askQuestion(userId);
@@ -944,6 +951,10 @@
     async function askQuestion(selectedUserId = null) {
       const question = questionInput.value.trim();
       if (!question) return;
+
+      const startTime = performance.now();
+      abortController = new AbortController();
+      const signal = abortController.signal;
 
       // 1. User Message
       appendMessage('user', question);
@@ -966,6 +977,7 @@
 
       statusText.textContent = "Processing...";
       askBtn.disabled = true;
+      stopBtn.style.display = 'inline-flex';
 
       try {
         const requestBody = { question };
@@ -976,7 +988,8 @@
         const res = await fetch("/api/query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody)
+          body: JSON.stringify(requestBody),
+          signal: signal
         });
 
         if (!res.ok) {
@@ -985,6 +998,8 @@
         }
 
         const data = await res.json();
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(1);
 
         // Remove loading message
         loadingMsg.remove();
@@ -1003,22 +1018,28 @@
           const assistantMsg = appendMessage('assistant', data.answer || "I found multiple researchers. Please select one:");
           const candidateNodes = renderCandidatesInChat(data.candidates, question, (data.intent && data.intent.author) || null);
           assistantMsg.appendChild(candidateNodes);
-          statusText.textContent = "Waiting for selection...";
+          statusText.textContent = `Waiting for selection... (${duration}s)`;
           chatHistory.scrollTop = chatHistory.scrollHeight;
         } else {
           // Normal Answer
           appendMessage('assistant', data.answer || "(No answer returned)");
-          statusText.textContent = "Done.";
+          statusText.textContent = `Done in ${duration}s.`;
         }
 
       } catch (err) {
         loadingMsg.remove();
-        appendMessage('assistant', `Error: ${err.message}`);
-        console.error(err);
-        statusText.textContent = "Error occurred.";
+        if (err.name === 'AbortError') {
+          appendMessage('assistant', "Thinking stopped.");
+          statusText.textContent = "Stopped.";
+        } else {
+          appendMessage('assistant', `Error: ${err.message}`);
+          console.error(err);
+          statusText.textContent = "Error occurred.";
+        }
       } finally {
         askBtn.disabled = false;
-        // statusText.textContent = ""; (optional to clear it)
+        stopBtn.style.display = 'none';
+        abortController = null;
       }
     }
 
@@ -1034,11 +1055,31 @@
       }
     });
 
-    askBtn.addEventListener('click', askQuestion);
+    const stopBtn = document.getElementById('stopBtn');
+
+    stopBtn.addEventListener('click', () => {
+      if (abortController) {
+        abortController.abort();
+      }
+    });
+
+    askBtn.addEventListener('click', () => askQuestion());
     questionInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      // If Enter is pressed without Cmd/Ctrl, send the question
+      if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         askQuestion();
+      }
+      // If Cmd/Ctrl + Enter is pressed, insert a new line (default behavior for textarea is usually Enter, 
+      // but we hijacked it above, so we let the browser handle the newline for Cmd+Enter or we do it manually)
+      else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        const start = questionInput.selectionStart;
+        const end = questionInput.selectionEnd;
+        const value = questionInput.value;
+        questionInput.value = value.substring(0, start) + "\n" + value.substring(end);
+        questionInput.selectionStart = questionInput.selectionEnd = start + 1;
+        // Trigger the oninput to resize the textarea
+        questionInput.dispatchEvent(new Event('input'));
       }
     });
 

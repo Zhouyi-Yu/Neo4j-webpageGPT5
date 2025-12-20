@@ -1,5 +1,7 @@
-Flask>=3.0.0,<4
-Werkzeug>=3.0.0,<4
+fastapi>=0.109.0
+uvicorn>=0.27.0
 python-dotenv>=1.0.1
 openai>=1.51.0
 neo4j>=5.22.0
+httpx>=0.26.0
+itsdangerous>=2.1.2
