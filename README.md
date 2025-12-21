@@ -43,7 +43,7 @@ OPENAI_API_KEY=your_openai_api_key
 
 ### 4. Running the Application
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 5001 --reload
+./start.sh
 ```
 Open `http://localhost:5001` in your browser.
 
