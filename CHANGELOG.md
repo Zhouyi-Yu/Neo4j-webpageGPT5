@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **FastAPI Migration**: Completely replaced Flask with FastAPI for high-performance, asynchronous request handling.
 - **Asynchronous Pipeline**: Refactored Neo4j and OpenAI integrations to use `async/await` throughout.
 - **Pydantic Validation**: Added strict request and response models for improved API stability.
+- **React Frontend**: Added a modern, responsive web interface with chat bubbles, debug panels, and improved user experience.
 - **Project Documentation**: Created comprehensive `README.md` and detailed system `walkthrough.md`.
 
 ### Changed
