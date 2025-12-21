@@ -72,6 +72,8 @@ Example 3: "who is witold pedrycz" -> Witold Pedrycz
 # CONFIGURATION
 # ───────────────────────────────────────────────────────────────
 
+MIN_RELEVANCE_SCORE = 0.7  # Increased from 0.65 to reduce noise
+
 OPENAI_MODEL_CHAT = "gpt-4o-mini"                     # gpt-5-mini is not available, using standard chat model
 OPENAI_MODEL_EMBED = "text-embedding-3-large"     # embedding model
 
@@ -557,139 +559,149 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
     """
     Full pipeline (ASYNC VERSION): Matches the exact logic and flow of olderVer/backend.py.
     """
-    # ~~~ STEP 0: INTENT CLASSIFICATION ~~~
-    intent_obj = await classify_intent(question)
-    intent_obj = normalize_intent(intent_obj)
+    result = {
+        "answer": "An internal error occurred while processing your request.",
+        "intent": {},
+        "cypher": "",
+        "dbRows": [],
+        "semanticHits": [],
+    }
 
-    # ~~~ STEP 0: HANDLE DIRECT USER SELECTION ~~~
-    # If selected_user_id is provided, or leaked Event object
-    if selected_user_id and isinstance(selected_user_id, str):
-        intent_obj["authorUserId"] = selected_user_id
-        # Promote to author query if it was generic
-        if intent_obj.get("intent") == "OPEN_QUESTION":
-            intent_obj["intent"] = "AUTHOR_MAIN_RESEARCH_AREAS"
+    try:
+        # ~~~ STEP 0: INTENT CLASSIFICATION ~~~
+        intent_obj = await classify_intent(question)
+        intent_obj = normalize_intent(intent_obj)
+        result["intent"] = intent_obj
 
-    # ~~~ STEP 1: AUTHOR RESOLUTION & INTENT PROMOTION ~~~
-    author_to_check = intent_obj.get("author")
-    
-    # If classifier didn't find specific author, try forceful extraction
-    if not author_to_check:
-        try:
-            # We only try extraction if the question is short-ish or likely to contain a name.
-            extracted = (await call_llm(NAME_EXTRACTION_PROMPT, question)).strip()
-            # Sanity: ignore common false positives
-            if extracted and len(extracted) > 3: 
-                author_to_check = extracted
-        except Exception as e:
-            print(f"Name extraction failed: {e}")
-
-    # If we have a name to check, run resolution
-    if author_to_check:
-        temp_intent = dict(intent_obj)
-        temp_intent["author"] = author_to_check
-        
-        updated_intent, candidates = await resolve_author(temp_intent)
-        
-        # A) Multiple Candidates Found -> Return immediately
-        if candidates and len(candidates) > 1:
-             msg = (
-                f"I couldn't find exact matches for '{author_to_check}', "
-                "but I found similar researchers. Please select one:"
-            )
-             return {
-                "answer": msg,
-                "intent": updated_intent,
-                "cypher": "",
-                "dbRows": [],
-                "semanticHits": [],
-                "candidates": candidates,
-            }
-        
-        # B) Single Match Found (Exact or Single Fuzzy)
-        elif updated_intent.get("authorUserId"):
-            intent_obj["author"] = updated_intent["author"]
-            intent_obj["authorUserId"] = updated_intent["authorUserId"]
-            
-            # CRITICAL FIX: If we found a valid author but intent is generic, PROMOTE it.
+        # ~~~ STEP 0: HANDLE DIRECT USER SELECTION ~~~
+        # If selected_user_id is provided, or leaked Event object
+        if selected_user_id and isinstance(selected_user_id, str):
+            intent_obj["authorUserId"] = selected_user_id
+            # Promote to author query if it was generic
             if intent_obj.get("intent") == "OPEN_QUESTION":
-                intent_obj["intent"] = "AUTHOR_PUBLICATIONS_RANGE"
+                intent_obj["intent"] = "AUTHOR_MAIN_RESEARCH_AREAS"
 
-    # ~~~ STEP 2: BRANCHING LOGIC ~~~
-
-    # Branch A: Template-Driven Flow (Structured Graph Query)
-    # We take this if it's a known template AND we have the request slots (e.g. Author)
-    if is_template_intent(intent_obj) and has_required_slots(intent_obj):
+        # ~~~ STEP 1: AUTHOR RESOLUTION & INTENT PROMOTION ~~~
+        author_to_check = intent_obj.get("author")
         
-        cypher = await generate_cypher(intent_obj)
-        db_rows = await run_cypher(cypher)
+        # If classifier didn't find specific author, try forceful extraction
+        if not author_to_check:
+            try:
+                # We only try extraction if the question is short-ish or likely to contain a name.
+                extracted = (await call_llm(NAME_EXTRACTION_PROMPT, question)).strip()
+                # Sanity: ignore common false positives
+                if extracted and len(extracted) > 3: 
+                    author_to_check = extracted
+            except Exception as e:
+                print(f"Name extraction failed: {e}")
 
-        if intent_obj.get("intent") in TOPIC_INTENTS:
-            semantic_hits = await semantic_search_publications(intent_obj.get("topic"))
+        # If we have a name to check, run resolution
+        if author_to_check:
+            temp_intent = dict(intent_obj)
+            temp_intent["author"] = author_to_check
+            
+            updated_intent, candidates = await resolve_author(temp_intent)
+            
+            # A) Multiple Candidates Found -> Return immediately
+            if candidates and len(candidates) > 1:
+                 result["answer"] = (
+                    f"I couldn't find exact matches for '{author_to_check}', "
+                    "but I found similar researchers. Please select one:"
+                )
+                 result["candidates"] = candidates
+                 return result
+            
+            # B) Single Match Found (Exact or Single Fuzzy)
+            elif updated_intent.get("authorUserId"):
+                intent_obj["author"] = updated_intent["author"]
+                intent_obj["authorUserId"] = updated_intent["authorUserId"]
+                
+                # CRITICAL FIX: If we found a valid author but intent is generic, PROMOTE it.
+                if intent_obj.get("intent") == "OPEN_QUESTION":
+                    intent_obj["intent"] = "AUTHOR_PUBLICATIONS_RANGE"
+
+        # ~~~ STEP 2: BRANCHING LOGIC ~~~
+
+        # Branch A: Template-Driven Flow (Structured Graph Query)
+        # We take this if it's a known template AND we have the request slots (e.g. Author)
+        if is_template_intent(intent_obj) and has_required_slots(intent_obj):
+            
+            cypher = await generate_cypher(intent_obj)
+            result["cypher"] = cypher
+            db_rows = await run_cypher(cypher)
+            result["dbRows"] = db_rows
+
+            if intent_obj.get("intent") in TOPIC_INTENTS:
+                raw_hits = await semantic_search_publications(intent_obj.get("topic"))
+                semantic_hits = [h for h in raw_hits if h.get("score", 0) >= MIN_RELEVANCE_SCORE]
+                result["semanticHits"] = semantic_hits
+            else:
+                semantic_hits = []
+
+            # Fallback: if structured query returned nothing, try UAlberta semantic fallback
+            if not db_rows and not semantic_hits:
+                semantic_hits = await semantic_search_uofa(question)
+                result["semanticHits"] = semantic_hits
+
+            # Synthesize
+            answer_text = await synthesize_answer(
+                question=question,
+                intent_obj=intent_obj,
+                cypher=cypher,
+                db_rows=db_rows,
+                semantic_hits=semantic_hits,
+                conversation_history=conversation_history,
+            )
+            
+            # Second-pass if needed
+            if not db_rows and semantic_hits:
+                 answer_text = await recursive_semantic_answer(question, semantic_hits, answer_text)
+
+            result["answer"] = answer_text
+            return result
+
+        # Branch B: Semantic / Fallback Flow
+        # For open questions, or template intents where we missed a slot (e.g. unknown author)
         else:
-            semantic_hits = []
+            # 1. Semantic Search (UAlberta authors only, limited fields)
+            raw_hits = await semantic_search_uofa(question)
+            semantic_hits = [h for h in raw_hits if h.get("score", 0) >= MIN_RELEVANCE_SCORE]
+            result["semanticHits"] = semantic_hits
+            
+            if not semantic_hits:
+                result["answer"] = (
+                    "I could not find any relevant UAlberta publications or researchers matching your question with high confidence.\n\n"
+                    "**Suggestions:**\n"
+                    "- Try asking about specific engineering topics like 'smart grids', 'reinforcement learning', or 'nanotechnology'.\n"
+                    "- Ask about specific University of Alberta researchers or departments.\n"
+                    "- Ensure you are asking about work specifically within the Faculty of Engineering."
+                )
+                return result
 
-        # Fallback: if structured query returned nothing, try UAlberta semantic fallback
-        if not db_rows and not semantic_hits:
-            semantic_hits = await semantic_search_uofa(question)
+            # 2. Generate Cypher to find authors for these specific publications
+            author_cypher = await generate_author_cypher(semantic_hits)
+            result["cypher"] = author_cypher
+            
+            # 3. Run Cypher (passing titles as parameter)
+            titles = [hit.get("title") for hit in semantic_hits if hit.get("title")]
+            try:
+                author_rows = await run_cypher(author_cypher, params={"titles": titles})
+            except Exception as e:
+                print(f"Error running author discovery cypher: {e}")
+                author_rows = []
+            result["dbRows"] = author_rows
 
-        # Synthesize
-        answer_text = await synthesize_answer(
-            question=question,
-            intent_obj=intent_obj,
-            cypher=cypher,
-            db_rows=db_rows,
-            semantic_hits=semantic_hits,
-            conversation_history=conversation_history,
-        )
-        
-        # Second-pass if needed
-        if not db_rows and semantic_hits:
-             answer_text = await recursive_semantic_answer(question, semantic_hits, answer_text)
+            # 4. Synthesize Final Answer
+            final_answer = await synthesize_final_author_answer(question, semantic_hits, author_rows, conversation_history)
+            result["answer"] = final_answer
+            return result
 
-        return {
-            "answer": answer_text,
-            "intent": intent_obj,
-            "cypher": cypher,
-            "dbRows": db_rows,
-            "semanticHits": semantic_hits,
-        }
-
-    # Branch B: Semantic / Fallback Flow
-    # For open questions, or template intents where we missed a slot (e.g. unknown author)
-    else:
-        # 1. Semantic Search (UAlberta authors only, limited fields)
-        semantic_hits = await semantic_search_uofa(question)
-        
-        if not semantic_hits:
-            return {
-                "answer": "I could not find any relevant UAlberta publications for your question.",
-                "intent": intent_obj,
-                "cypher": "",
-                "dbRows": [],
-                "semanticHits": [],
-            }
-
-        # 2. Generate Cypher to find authors for these specific publications
-        author_cypher = await generate_author_cypher(semantic_hits)
-        
-        # 3. Run Cypher (passing titles as parameter)
-        titles = [hit.get("title") for hit in semantic_hits if hit.get("title")]
-        try:
-            author_rows = await run_cypher(author_cypher, params={"titles": titles})
-        except Exception as e:
-            print(f"Error running author discovery cypher: {e}")
-            author_rows = []
-
-        # 4. Synthesize Final Answer
-        final_answer = await synthesize_final_author_answer(question, semantic_hits, author_rows, conversation_history)
-
-        return {
-            "answer": final_answer,
-            "intent": intent_obj,
-            "cypher": author_cypher,
-            "dbRows": author_rows,
-            "semanticHits": semantic_hits,
-        }
+    except Exception as e:
+        print(f"Error in answer_question pipeline: {e}")
+        import traceback
+        traceback.print_exc()
+        result["error"] = str(e)
+        return result
 
 # ───────────────────────────────────────────────────────────────
 # CLI TEST (optional)

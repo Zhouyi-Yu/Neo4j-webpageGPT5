@@ -67,21 +67,36 @@ async def api_query(request: Request, query: QueryRequest):
         # Call the async backend
         result = await answer_question(question, conversation_history, query.selected_user_id)
         
+        # If there's an error key in the result, we still want to update history if possible
+        answer = result.get("answer", "")
+        
         # Update conversation history
-        # Add user question
         conversation_history.append({"role": "user", "content": question})
-        # Add assistant answer
-        conversation_history.append({"role": "assistant", "content": result.get("answer", "")})
+        conversation_history.append({"role": "assistant", "content": answer})
         
         # Keep only last 10 messages (5 Q&A pairs)
         conversation_history = conversation_history[-10:]
         request.session["conversation_history"] = conversation_history
         
+        # If an error occurred inside the pipeline but was caught, return as 200 
+        # (Frontend will check the result object for debug data)
         return result
     except Exception as e:
-        # Log error details in a real app; for now just return 500
-        print(f"Error while answering question: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"CRITICAL: Uncaught error in api_query: {e}")
+        import traceback
+        traceback.print_exc()
+        # In case of total crash, still try to return a structural error
+        return JSONResponse(
+            status_code=500,
+            content={
+                "answer": f"A system error occurred: {str(e)}",
+                "intent": {},
+                "cypher": "",
+                "dbRows": [],
+                "semanticHits": [],
+                "error": str(e)
+            }
+        )
 
 @app.post("/api/log-debug")
 async def log_debug(entry: DebugLogEntry):
@@ -91,6 +106,7 @@ async def log_debug(entry: DebugLogEntry):
             f.write(json.dumps(entry.model_dump(), ensure_ascii=False) + "\n")
         return {"status": "success"}
     except Exception as e:
+        print(f"Error writing debug log: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to write debug log: {str(e)}")
 
 @app.get("/api/debug-log")
@@ -100,12 +116,14 @@ async def get_debug_log():
         if not os.path.exists(DEBUG_LOG_FILE):
             return Response(content="", media_type="text/plain")
         
+        # Use a generator or limited read if file is huge, but for now 1MB is fine
         with open(DEBUG_LOG_FILE, "r", encoding="utf-8") as f:
             content = f.read()
         
         return Response(content=content, media_type="text/plain")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read debug log: {str(e)}")
+        print(f"Error reading debug log: {e}")
+        return Response(content=f"Error reading log file: {e}", status_code=500, media_type="text/plain")
 
 # Mount static files to serve logos, prompts, etc.
 # Check if directories exist before mounting

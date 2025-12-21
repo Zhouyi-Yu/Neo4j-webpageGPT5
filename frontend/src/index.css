@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+    --color-brand-blue: #38bdf8;
+    --color-brand-purple: #6366f1;
+}
+
+body {
+    margin: 0;
+    background-color: #0f172a;
+    color: #e5e7eb;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+}
