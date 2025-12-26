@@ -1,0 +1,26 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: neo4j-research-rag
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"  # Saves money!
+        autoscaling.knative.dev/maxScale: "5"
+    spec:
+      containers:
+      - image: gcr.io/YOUR_PROJECT_ID/neo4j-research-rag:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: NEO4J_URI
+          value: "neo4j+s://your-instance.databases.neo4j.io"
+        - name: NEO4J_USER
+          value: "neo4j"
+        - name: NEO4J_PASSWORD
+          value: "secret-password" # Quick start; use Secret Manager in prod
+        - name: OPENAI_API_KEY
+          value: "sk-..."

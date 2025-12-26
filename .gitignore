@@ -16,3 +16,12 @@ ENV/
 # IDEs
 .vscode/
 .idea/
+
+# Database and Data
+data/
+backups/
+logs/
+dumpedDB/
+debug_log.txt
+frontend/node_modules/
+**/._*
