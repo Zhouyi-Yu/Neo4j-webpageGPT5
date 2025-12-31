@@ -45,7 +45,8 @@ OPENAI_API_KEY=your_openai_api_key
 ```bash
 ./start.sh
 ```
-Open `http://localhost:5001` in your browser.
+- **Access the App**: Open [http://localhost:5173](http://localhost:5173) in your browser.
+- **View Control Flow**: Open [http://localhost:5173/cfg.html](http://localhost:5173/cfg.html) and see [CFG_README.md](CFG_README.md) for details.
 
 ## 🔍 Troubleshooting
 

@@ -35,7 +35,6 @@ function cleanup {
 trap cleanup SIGINT SIGTERM
 
 echo "✅ All services running!"
-echo "📡 Backend: http://localhost:5001"
 echo "🌐 Frontend: http://localhost:5173"
 
 wait

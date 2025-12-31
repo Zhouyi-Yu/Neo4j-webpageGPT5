@@ -39,7 +39,7 @@ const DebugPanel = ({ data, isThinking, isOpen, onOpenLogs }) => {
                     View Debug Log
                 </button>
                 <button
-                    onClick={() => window.open('/visualize_cfg.html', '_blank')}
+                    onClick={() => window.open('/cfg.html', '_blank')}
                     className="w-full py-3 px-4 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition-all text-sm font-semibold flex items-center justify-center gap-2"
                 >
                     Control Flow Graph

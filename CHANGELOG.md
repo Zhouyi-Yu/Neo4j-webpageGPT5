@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.0.0] - 2025-12-30
+### Added
+- **Production Cloud Deployment**: Deployed full system to Google Cloud Platform (GCP) Compute Engine.
+- **CI/CD Pipeline**: Implemented automated GitHub Actions workflow for zero-downtime SSH deployments.
+- **Neo4j Enterprise**: Upgraded to Neo4j Enterprise Edition to support high-performance "Block Format" databases.
+- **Infrastructure Code**: Added `docker-compose.prod.yml` and `DEPLOYMENT_GUIDE.md` for reproducible cloud setups.
+
+### Changed
+- **Database Architecture**: Migrated from local desktop DB to containerized 50GB+ cloud storage solution.
+- **Memory Optimization**: Tuned JVM heap and pagecache settings for 8GB RAM cloud environment.
+
+## [3.1.0] - 2025-12-28
+### Added
+- **Production Cloud Deployment**: Successfully deployed the entire Neo4j Enterprise stack to Google Cloud Platform (GCP).
+  - Engineered a robust data migration strategy (handling version mismatches by upgrading from Neo4j 5.22 to 5.26).
+  - Configured secure Docker environment variables and resolved GCP firewall networking issues for external access.
+  - Demonstrated end-to-end cloud infrastructure management skills.
+- **Improved Frontend**:
+  - Fixed Control Flow Graph (CFG) visualization link.
+  - Cleaned up UI logs for a more professional user experience.
+
 ## [3.0.0] - 2025-12-20
 ### Added
 - **FastAPI Migration**: Completely replaced Flask with FastAPI for high-performance, asynchronous request handling.
