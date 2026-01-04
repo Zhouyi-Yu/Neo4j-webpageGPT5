@@ -622,43 +622,42 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
 
         # ~~~ STEP 3: AUTHOR RESOLUTION & INTENT PROMOTION ~~~
         # Skip resolution if we already have a direct user selection (ID)
-        author_to_check = intent_obj.get("author")
+        author_to_resolve = intent_obj.get("author")
         
-        if author_to_check and not selected_user_id:
+        # If classifier didn't find specific author, try forceful extraction from original question
+        if not author_to_resolve and not selected_user_id:
+            try:
+                extracted = (await call_llm(NAME_EXTRACTION_PROMPT, question)).strip()
+                if extracted and len(extracted) > 3: 
+                    author_to_resolve = extracted
+            except Exception as e:
+                print(f"Name extraction failed: {e}")
+
+        # Now, if we have a name to resolve (either from intent or extraction)
+        if author_to_resolve and not selected_user_id:
             res_start = time.perf_counter()
+            temp_intent = dict(intent_obj)
+            temp_intent["author"] = author_to_resolve
             
-            # If classifier didn't find specific author, try forceful extraction
-            if not author_to_check:
-                try:
-                    extracted = (await call_llm(NAME_EXTRACTION_PROMPT, question)).strip()
-                    if extracted and len(extracted) > 3: 
-                        author_to_check = extracted
-                except Exception as e:
-                    print(f"Name extraction failed: {e}")
+            updated_intent, candidates, res_meta = await resolve_author(temp_intent)
+            result["telemetry"]["resolution"] = res_meta
+            result["telemetry"]["timings"]["author_resolution"] = round(time.perf_counter() - res_start, 3)
 
-            if author_to_check:
-                temp_intent = dict(intent_obj)
-                temp_intent["author"] = author_to_check
+            # If ANY candidates were found via fuzzy search, show the menu
+            if candidates:
+                result["answer"] = (
+                    f"I couldn't find exact matches for '{author_to_resolve}', "
+                    "but I found similar researchers. Please select one:"
+                )
+                result["candidates"] = candidates
+                return result
+            
+            elif updated_intent.get("authorUserId"):
+                intent_obj["author"] = updated_intent["author"]
+                intent_obj["authorUserId"] = updated_intent["authorUserId"]
                 
-                updated_intent, candidates, res_meta = await resolve_author(temp_intent)
-                result["telemetry"]["resolution"] = res_meta
-                result["telemetry"]["timings"]["author_resolution"] = round(time.perf_counter() - res_start, 3)
-
-                # If ANY candidates were found via fuzzy search, show the menu
-                if candidates:
-                     result["answer"] = (
-                        f"I couldn't find exact matches for '{author_to_check}', "
-                        "but I found similar researchers. Please select one:"
-                    )
-                     result["candidates"] = candidates
-                     return result
-                
-                elif updated_intent.get("authorUserId"):
-                    intent_obj["author"] = updated_intent["author"]
-                    intent_obj["authorUserId"] = updated_intent["authorUserId"]
-                    
-                    if intent_obj.get("intent") == "OPEN_QUESTION":
-                        intent_obj["intent"] = "AUTHOR_PUBLICATIONS_RANGE"
+                if intent_obj.get("intent") == "OPEN_QUESTION":
+                    intent_obj["intent"] = "AUTHOR_PUBLICATIONS_RANGE"
         
         elif selected_user_id:
             # Step 2: HANDLE DIRECT USER SELECTION
