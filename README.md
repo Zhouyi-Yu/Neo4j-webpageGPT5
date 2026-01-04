@@ -4,6 +4,10 @@
 
 A high-performance, LLM-driven research discovery engine for the University of Alberta, powered by **FastAPI**, **Neo4j**, and **OpenAI**.
 
+## 🎥 System Demo
+[![Watch the Demo](https://img.shields.io/badge/Watch-Live_Demo-red?style=for-the-badge&logo=youtube)](https://youtu.be/r6HKEPUNpHQ)
+*Click the badge above to watch the technical walkthrough of the system.*
+
 ## 🚀 System Architecture
 
 This system is built with **FastAPI** to provide a high-concurrency, asynchronous backend capable of orchestrating complex LLM and Graph Database operations in real-time.
