@@ -36,6 +36,7 @@ class DebugLogEntry(BaseModel):
     cypher: str
     dbRows: List[Dict[str, Any]]
     semanticHits: List[Dict[str, Any]]
+    telemetry: Optional[Dict[str, Any]] = None
 
 # ROUTES
 

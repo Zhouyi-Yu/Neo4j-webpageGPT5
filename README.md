@@ -48,6 +48,31 @@ OPENAI_API_KEY=your_openai_api_key
 - **Access the App**: Open [http://localhost:5173](http://localhost:5173) in your browser.
 - **View Control Flow**: Open [http://localhost:5173/cfg.html](http://localhost:5173/cfg.html) and see [CFG_README.md](CFG_README.md) for details.
 
+## ☁️ Cloud Deployment (Production)
+
+This system is **currently deployed on Google Cloud Platform** for production use by the Faculty of Engineering.
+
+### Infrastructure Architecture
+- **Compute**: GCP Compute Engine (e2-medium instance, Ubuntu 22.04)
+- **Database**: Self-hosted Neo4j 5.26 Enterprise on GCP VM
+  - 2GB page cache, 1GB heap (optimized for 100k+ nodes)
+  - Configured with bolt connector on port 7687
+- **Networking**: 
+  - External static IP with firewall rules for Neo4j (7687) and HTTP (80/443)
+  - Secure authentication with environment-based credentials
+- **Data Migration**: Full `neo4j.dump` restore ensuring 100% data parity from local development
+
+### Cloud-Specific Configurations
+The production `.env` uses the GCP external IP:
+```env
+NEO4J_URI=bolt://<GCP_EXTERNAL_IP>:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=<secure_password>
+```
+
+### Deployment Evidence
+See [CHANGELOG.md](CHANGELOG.md) (Version 3.1.0) for the complete migration timeline and [docs/gcp-architecture.md](docs/gcp-architecture.md) for detailed infrastructure diagrams.
+
 ## 🔍 Troubleshooting
 
 ### Neo4j Authentication

@@ -8,7 +8,27 @@ const DebugPanel = ({ data, isThinking, isOpen, onOpenLogs }) => {
         >
             <div className="mt-12 mb-8">
                 <h2 className="text-xl font-bold text-white mb-2">Debug Info</h2>
-                <div className="h-1 w-20 bg-blue-500 rounded-full" />
+                <div className="h-1 w-20 bg-blue-500 rounded-full mb-6" />
+
+                {data.telemetry?.timings && (
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 mb-8">
+                        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Latency Breakdown (sec)</h3>
+                        <div className="space-y-3">
+                            {Object.entries(data.telemetry.timings).map(([step, time]) => (
+                                <TimingItem key={step} label={step} value={time} />
+                            ))}
+                        </div>
+                        {data.telemetry.resolution?.resolution_path && (
+                            <div className="mt-4 pt-4 border-t border-slate-800/50">
+                                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Resolution Path</div>
+                                <div className="text-sm text-blue-400 font-mono font-bold">
+                                    {data.telemetry.resolution.resolution_path}
+                                    {data.telemetry.resolution.fuzzy_scores && ` (Scores: ${data.telemetry.resolution.fuzzy_scores.join(', ')})`}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="space-y-6">
@@ -48,6 +68,21 @@ const DebugPanel = ({ data, isThinking, isOpen, onOpenLogs }) => {
         </aside>
     );
 };
+
+const TimingItem = ({ label, value }) => (
+    <div className="flex flex-col gap-1">
+        <div className="flex justify-between items-center text-[10px] font-medium font-mono">
+            <span className="text-slate-400 capitalize">{label.replace(/_/g, ' ')}</span>
+            <span className="text-blue-400">{value}s</span>
+        </div>
+        <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+            <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-1000"
+                style={{ width: `${Math.min((value / 15) * 100, 100)}%` }}
+            />
+        </div>
+    </div>
+);
 
 const DebugSection = ({ title, content, isCode }) => (
     <div className="space-y-2">

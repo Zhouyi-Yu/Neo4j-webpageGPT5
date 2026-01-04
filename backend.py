@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from neo4j import AsyncGraphDatabase
 import asyncio
+import time
 
 # ───────────────────────────────────────────────────────────────
 # LOAD ENV (.env in this folder)
@@ -282,10 +283,14 @@ async def recursive_semantic_answer(
     user_content = json.dumps(payload, ensure_ascii=False)
     return await call_llm(SEMANTIC_REASK_PROMPT, user_content)
 
-async def resolve_author(intent_obj: Dict[str, Any]):
-    author_name = (intent_obj or {}).get("author")
+async def resolve_author(intent_obj: Dict[str, Any]) -> tuple:
+    """
+    Resolves author name to a specific userId.
+    Returns: (updated_intent, candidates_if_any, metadata)
+    """
+    author_name = (intent_obj.get("author") or "").strip()
     if not author_name:
-        return intent_obj, None
+        return intent_obj, None, {"resolution_path": "NONE"}
 
     async with driver.session() as session:
         # Step 1: Exact Match (Case-Insensitive)
@@ -301,21 +306,15 @@ async def resolve_author(intent_obj: Dict[str, Any]):
         exact_result = await result.single()
         
         if exact_result:
-            # Exact match found - auto-select
+            # Exact match found
             intent_obj["author"] = exact_result["name"]
             intent_obj["authorUserId"] = exact_result["userId"]
-            return intent_obj, None
+            return intent_obj, None, {"resolution_path": "EXACT"}
 
         # Step 2: Fuzzy Search Fallback
-        # Only runs if no exact match found
-
-        # "Marek Reformat" -> "Marek~ Reformat~"
-        # We split by space and append ~, then join.
-        # Sanitization: fail safe if name is weird.
+        # RESTORED: Fuzzy search should NOT auto-select unless extremely confident
+        # Actually, for the demo, we want to see the selection list if it's not an exact match.
         if " " in author_name:
-            # We want AND behavior usually? Or OR?
-            # Lucene default is OR usually, but let's try just appending ~ to each term.
-            # "TestMark~ Refamt~"
             fuzzy_name_query = " ".join([f"{part}~" for part in author_name.split() if part.strip()])
         else:
             fuzzy_name_query = author_name + "~"
@@ -335,12 +334,17 @@ async def resolve_author(intent_obj: Dict[str, Any]):
         result = await session.run(fuzzy_cypher, term=fuzzy_name_query)
         rows = await result.data()
 
-        # If fuzzy returns matches, treat them as candidates
-        if rows:
-            return intent_obj, rows
+        # Metadata for telemetry
+        metadata = {
+            "resolution_path": "FUZZY",
+            "fuzzy_scores": [r.get("score", 0) for r in rows]
+        }
 
-        # If no results at all, return None
-        return intent_obj, None
+        # If fuzzy returns matches, treat them as candidates (no auto-select here)
+        if rows:
+            return intent_obj, rows, metadata
+
+        return intent_obj, None, metadata
 
 
 
@@ -395,6 +399,34 @@ async def semantic_search_publications(topic: Optional[str], k: int = 200) -> Li
         print(f"[semantic_search_publications] Error during vector query: {e}")
         return []
 
+
+async def _semantic_search_with_embedding(embedding: List[float], k: int = 20) -> List[Dict[str, Any]]:
+    """Helper for Step 0 optimization."""
+    if not embedding: return []
+    cypher = f"""
+    CALL db.index.vector.queryNodes('{VECTOR_INDEX_NAME}', $k, $embedding)
+    YIELD node, score
+    MATCH (node)<-[:PUBLISHED]-(ap:AuthorProfile)
+    OPTIONAL MATCH (person:Person)-[:HAS_PROFILE {{source:'openalex'}}]->(ap)
+    WITH node, score, person
+    WHERE person IS NOT NULL AND (person.userId IS NOT NULL OR person.ccid IS NOT NULL)
+    RETURN node.title            AS title,
+           node.publication_year AS publication_year,
+           coalesce(node.cited_by_count, 0) AS cited_by_count,
+           node.abstract         AS abstract,
+           node.openalex_url     AS openalex_url,
+           node.doi              AS doi,
+           score
+    ORDER BY score DESC
+    LIMIT $k
+    """
+    try:
+        async with driver.session() as session:
+            result = await session.run(cypher, k=k, embedding=embedding)
+            return await result.data()
+    except Exception as e:
+        print(f"[semantic_search_uofa] Error: {e}")
+        return []
 
 async def semantic_search_uofa(question_text: str, k: int = 20) -> List[Dict[str, Any]]:
     """
@@ -542,13 +574,15 @@ def is_template_intent(intent_obj: Dict[str, Any]) -> bool:
 def has_required_slots(intent_obj: Dict[str, Any]) -> bool:
     """
     Ensure required slots are present before running template-based logic.
+    CRITICAL: For author-based intents, we now REQUIRE authorUserId (the ID).
     """
     intent = (intent_obj or {}).get("intent")
     if intent in AUTHOR_INTENTS_REQUIRING_AUTHOR:
-        if not (intent_obj or {}).get("author"):
+        if not (intent_obj or {}).get("authorUserId"):
             return False
     if intent == "AUTHOR_PAIR_SHARED_PUBLICATIONS":
-        if not ((intent_obj or {}).get("author") and (intent_obj or {}).get("second_author")):
+        # Note: shared publications usually takes IDs too, but we haven't fully expanded it yet
+        if not ((intent_obj or {}).get("authorUserId") and (intent_obj or {}).get("second_author")):
             return False
     if intent == "DEPARTMENT_TOPIC_TRENDS":
         if not (intent_obj or {}).get("department"):
@@ -565,110 +599,143 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
         "cypher": "",
         "dbRows": [],
         "semanticHits": [],
+        "telemetry": {
+            "timings": {},
+            "resolution": {}
+        }
     }
 
     try:
-        # ~~~ STEP 0: INTENT CLASSIFICATION ~~~
-        intent_obj = await classify_intent(question)
+        total_start = time.perf_counter()
+
+        # ~~~ STEP 0 & 1: INTENT & EMBEDDING (SPECULATIVE PARALLEL) ~~~
+        # We run classification and embedding generation for the fallback concurrently
+        step0_start = time.perf_counter()
+        intent_task = asyncio.create_task(classify_intent(question))
+        embedding_task = asyncio.create_task(get_embedding(question))
+        
+        intent_obj, question_embedding = await asyncio.gather(intent_task, embedding_task)
+        result["telemetry"]["timings"]["step0_setup"] = round(time.perf_counter() - step0_start, 3)
+
         intent_obj = normalize_intent(intent_obj)
         result["intent"] = intent_obj
 
-        # ~~~ STEP 0: HANDLE DIRECT USER SELECTION ~~~
-        # If selected_user_id is provided, or leaked Event object
-        if selected_user_id and isinstance(selected_user_id, str):
+        # ~~~ STEP 3: AUTHOR RESOLUTION & INTENT PROMOTION ~~~
+        # Skip resolution if we already have a direct user selection (ID)
+        author_to_check = intent_obj.get("author")
+        
+        if author_to_check and not selected_user_id:
+            res_start = time.perf_counter()
+            
+            # If classifier didn't find specific author, try forceful extraction
+            if not author_to_check:
+                try:
+                    extracted = (await call_llm(NAME_EXTRACTION_PROMPT, question)).strip()
+                    if extracted and len(extracted) > 3: 
+                        author_to_check = extracted
+                except Exception as e:
+                    print(f"Name extraction failed: {e}")
+
+            if author_to_check:
+                temp_intent = dict(intent_obj)
+                temp_intent["author"] = author_to_check
+                
+                updated_intent, candidates, res_meta = await resolve_author(temp_intent)
+                result["telemetry"]["resolution"] = res_meta
+                result["telemetry"]["timings"]["author_resolution"] = round(time.perf_counter() - res_start, 3)
+
+                # If ANY candidates were found via fuzzy search, show the menu
+                if candidates:
+                     result["answer"] = (
+                        f"I couldn't find exact matches for '{author_to_check}', "
+                        "but I found similar researchers. Please select one:"
+                    )
+                     result["candidates"] = candidates
+                     return result
+                
+                elif updated_intent.get("authorUserId"):
+                    intent_obj["author"] = updated_intent["author"]
+                    intent_obj["authorUserId"] = updated_intent["authorUserId"]
+                    
+                    if intent_obj.get("intent") == "OPEN_QUESTION":
+                        intent_obj["intent"] = "AUTHOR_PUBLICATIONS_RANGE"
+        
+        elif selected_user_id:
+            # Step 2: HANDLE DIRECT USER SELECTION
+            # We already have the user selection from the frontend
             intent_obj["authorUserId"] = selected_user_id
-            # Promote to author query if it was generic
+            
+            # Fetch the canonical name so the LLM doesn't use the typo from the original question
+            async with driver.session() as session:
+                name_query = "MATCH (p:Person {userId: $uid}) RETURN coalesce(p.name, p.normalized_name) AS name"
+                name_res = await session.run(name_query, uid=selected_user_id)
+                name_record = await name_res.single()
+                if name_record:
+                    intent_obj["author"] = name_record["name"]
+
+            # Promote intent if it was too generic
             if intent_obj.get("intent") == "OPEN_QUESTION":
                 intent_obj["intent"] = "AUTHOR_MAIN_RESEARCH_AREAS"
 
-        # ~~~ STEP 1: AUTHOR RESOLUTION & INTENT PROMOTION ~~~
-        author_to_check = intent_obj.get("author")
-        
-        # If classifier didn't find specific author, try forceful extraction
-        if not author_to_check:
-            try:
-                # We only try extraction if the question is short-ish or likely to contain a name.
-                extracted = (await call_llm(NAME_EXTRACTION_PROMPT, question)).strip()
-                # Sanity: ignore common false positives
-                if extracted and len(extracted) > 3: 
-                    author_to_check = extracted
-            except Exception as e:
-                print(f"Name extraction failed: {e}")
+        # ~~~ STEP 4: BRANCHING LOGIC ~~~
 
-        # If we have a name to check, run resolution
-        if author_to_check:
-            temp_intent = dict(intent_obj)
-            temp_intent["author"] = author_to_check
-            
-            updated_intent, candidates = await resolve_author(temp_intent)
-            
-            # A) Multiple Candidates Found -> Return immediately
-            if candidates and len(candidates) > 1:
-                 result["answer"] = (
-                    f"I couldn't find exact matches for '{author_to_check}', "
-                    "but I found similar researchers. Please select one:"
-                )
-                 result["candidates"] = candidates
-                 return result
-            
-            # B) Single Match Found (Exact or Single Fuzzy)
-            elif updated_intent.get("authorUserId"):
-                intent_obj["author"] = updated_intent["author"]
-                intent_obj["authorUserId"] = updated_intent["authorUserId"]
-                
-                # CRITICAL FIX: If we found a valid author but intent is generic, PROMOTE it.
-                if intent_obj.get("intent") == "OPEN_QUESTION":
-                    intent_obj["intent"] = "AUTHOR_PUBLICATIONS_RANGE"
-
-        # ~~~ STEP 2: BRANCHING LOGIC ~~~
-
-        # Branch A: Template-Driven Flow (Structured Graph Query)
-        # We take this if it's a known template AND we have the request slots (e.g. Author)
         if is_template_intent(intent_obj) and has_required_slots(intent_obj):
+            # Branch A: Structured Template Flow
+            spec_start = time.perf_counter()
+            cypher_task = asyncio.create_task(generate_cypher(intent_obj))
             
-            cypher = await generate_cypher(intent_obj)
-            result["cypher"] = cypher
-            db_rows = await run_cypher(cypher)
-            result["dbRows"] = db_rows
-
+            semantic_hits = []
             if intent_obj.get("intent") in TOPIC_INTENTS:
-                raw_hits = await semantic_search_publications(intent_obj.get("topic"))
+                semantic_task = asyncio.create_task(semantic_search_publications(intent_obj.get("topic")))
+                cypher, raw_hits = await asyncio.gather(cypher_task, semantic_task)
                 semantic_hits = [h for h in raw_hits if h.get("score", 0) >= MIN_RELEVANCE_SCORE]
-                result["semanticHits"] = semantic_hits
             else:
-                semantic_hits = []
+                cypher = await cypher_task
+            
+            result["telemetry"]["timings"]["speculative_generation"] = round(time.perf_counter() - spec_start, 3)
+            result["cypher"] = cypher
+            
+            db_start = time.perf_counter()
+            db_rows = await run_cypher(cypher)
+            result["telemetry"]["timings"]["db_query"] = round(time.perf_counter() - db_start, 3)
+            
+            result["dbRows"] = db_rows
+            result["semanticHits"] = semantic_hits
 
-            # Fallback: if structured query returned nothing, try UAlberta semantic fallback
+            # If no results from structured, try semantic fallback
             if not db_rows and not semantic_hits:
-                semantic_hits = await semantic_search_uofa(question)
+                fall_start = time.perf_counter()
+                semantic_hits = await _semantic_search_with_embedding(question_embedding)
+                result["telemetry"]["timings"]["semantic_fallback"] = round(time.perf_counter() - fall_start, 3)
                 result["semanticHits"] = semantic_hits
 
-            # Synthesize
+            # Synthesize final answer
+            syn_start = time.perf_counter()
             answer_text = await synthesize_answer(
                 question=question,
                 intent_obj=intent_obj,
                 cypher=cypher,
                 db_rows=db_rows,
                 semantic_hits=semantic_hits,
-                conversation_history=conversation_history,
+                conversation_history=conversation_history
             )
+            result["telemetry"]["timings"]["synthesis"] = round(time.perf_counter() - syn_start, 3)
             
-            # Second-pass if needed
+            # Additional semantic pass if structured results were empty
             if not db_rows and semantic_hits:
-                 answer_text = await recursive_semantic_answer(question, semantic_hits, answer_text)
+                 try:
+                    answer_text = await recursive_semantic_answer(question, semantic_hits, answer_text)
+                 except: pass
 
             result["answer"] = answer_text
-            return result
 
-        # Branch B: Semantic / Fallback Flow
-        # For open questions, or template intents where we missed a slot (e.g. unknown author)
         else:
-            # 1. Semantic Search (UAlberta authors only, limited fields)
-            raw_hits = await semantic_search_uofa(question)
-            semantic_hits = [h for h in raw_hits if h.get("score", 0) >= MIN_RELEVANCE_SCORE]
-            result["semanticHits"] = semantic_hits
+            # Branch B: Open Question / Semantic Flow
+            open_start = time.perf_counter()
+            sem_hits = await _semantic_search_with_embedding(question_embedding)
+            result["semanticHits"] = sem_hits
             
-            if not semantic_hits:
+            if not sem_hits:
                 result["answer"] = (
                     "I could not find any relevant UAlberta publications or researchers matching your question with high confidence.\n\n"
                     "**Suggestions:**\n"
@@ -676,25 +743,27 @@ async def answer_question(question: str, conversation_history: Optional[List[Dic
                     "- Ask about specific University of Alberta researchers or departments.\n"
                     "- Ensure you are asking about work specifically within the Faculty of Engineering."
                 )
+                result["telemetry"]["timings"]["open_question"] = round(time.perf_counter() - open_start, 3)
                 return result
 
-            # 2. Generate Cypher to find authors for these specific publications
-            author_cypher = await generate_author_cypher(semantic_hits)
+            # Attempt a "Discovery" pass (look for authors of these papers)
+            disc_start = time.perf_counter()
+            author_cypher = await generate_author_cypher(sem_hits)
             result["cypher"] = author_cypher
             
-            # 3. Run Cypher (passing titles as parameter)
-            titles = [hit.get("title") for hit in semantic_hits if hit.get("title")]
-            try:
-                author_rows = await run_cypher(author_cypher, params={"titles": titles})
-            except Exception as e:
-                print(f"Error running author discovery cypher: {e}")
-                author_rows = []
+            titles = [hit.get("title") for hit in sem_hits if hit.get("title")]
+            author_rows = await run_cypher(author_cypher, params={"titles": titles})
+            result["telemetry"]["timings"]["author_discovery"] = round(time.perf_counter() - disc_start, 3)
             result["dbRows"] = author_rows
 
-            # 4. Synthesize Final Answer
-            final_answer = await synthesize_final_author_answer(question, semantic_hits, author_rows, conversation_history)
+            syn_start = time.perf_counter()
+            final_answer = await synthesize_final_author_answer(question, sem_hits, author_rows, conversation_history)
+            result["telemetry"]["timings"]["synthesis"] = round(time.perf_counter() - syn_start, 3)
             result["answer"] = final_answer
-            return result
+            result["telemetry"]["timings"]["open_question_pipeline"] = round(time.perf_counter() - open_start, 3)
+
+        result["telemetry"]["timings"]["total"] = round(time.perf_counter() - total_start, 3)
+        return result
 
     except Exception as e:
         print(f"Error in answer_question pipeline: {e}")

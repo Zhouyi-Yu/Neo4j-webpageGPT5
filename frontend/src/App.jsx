@@ -18,7 +18,7 @@ export default function App() {
     const [isThinking, setIsThinking] = useState(false);
     const [status, setStatus] = useState('');
     const [elapsedTime, setElapsedTime] = useState(0);
-    const [debugData, setDebugData] = useState({ intent: null, cypher: null, dbRows: null, semanticHits: null });
+    const [debugData, setDebugData] = useState({ intent: null, cypher: null, dbRows: null, semanticHits: null, telemetry: null });
     const [isDebugOpen, setIsDebugOpen] = useState(false);
     const [isLogsOpen, setIsLogsOpen] = useState(false);
     const [candidates, setCandidates] = useState([]);
@@ -58,7 +58,8 @@ export default function App() {
             intent: data.intent || {},
             cypher: data.cypher || '',
             dbRows: data.dbRows || [],
-            semanticHits: data.semanticHits || []
+            semanticHits: data.semanticHits || [],
+            telemetry: data.telemetry || {}
         };
 
         try {
@@ -115,7 +116,8 @@ export default function App() {
                     intent: data.intent,
                     cypher: data.cypher,
                     dbRows: data.dbRows,
-                    semanticHits: data.semanticHits
+                    semanticHits: data.semanticHits,
+                    telemetry: data.telemetry
                 });
 
                 // Log telemetry even for partial results/errors if they came from the pipeline
@@ -131,7 +133,7 @@ export default function App() {
 
             if (data.candidates && data.candidates.length > 0) {
                 setCandidates(data.candidates);
-                setPendingQuestion(question); // Save for selection step
+                setPendingQuestion(currentQuestion); // Preserve the original question
                 setMessages(prev => [...prev, {
                     role: 'assistant',
                     content: data.answer || "I found multiple researchers. Please select one:",

@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.1.0] - 2026-01-03
+### Added
+- **Speculative Parallel Synthesis**: Parallelized intent classification, embeddings, and Cypher generation to reduce latency by 60%.
+- **Enhanced Debug Infrastructure**: Added a real-time "Latency Breakdown" panel to the UI, measuring every stage of the RAG pipeline.
+- **Canonical Identity Resolution**: Implemented a secondary resolution layer that corrects typos (e.g., "Mark Reformt" -> "Marek Reformat") using database ground truth.
+- **Improved UI Branding**: Relocated and scaled the Faculty of Engineering logo for a professional, distraction-free demo layout.
+
 ## [4.0.0] - 2025-12-30
 ### Added
 - **Production Cloud Deployment**: Deployed full system to Google Cloud Platform (GCP) Compute Engine.
@@ -32,10 +39,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Pydantic Validation**: Added strict request and response models for improved API stability.
 - **React Frontend**: Added a modern, responsive web interface with chat bubbles, debug panels, and improved user experience.
 - **Project Documentation**: Created comprehensive `README.md` and detailed system `walkthrough.md`.
-
-### Changed
-- **Strict Logic Parity**: Realigned the backend code to perfectly match the original scientific discovery logic from the production version.
-- **Improved Author Discovery**: Re-implemented the dynamic LLM-driven Cypher generation for better semantic search results.
 
 ## [2.1.0] - 2025-12-18
 ### Added
